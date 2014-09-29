@@ -73,36 +73,36 @@ class FailoverTestTopo(Topo):
 
         h1 = self.addHost(
                 'h1',
-                cls  = VLANHost,
+                #cls  = VLANHost,
                 vlan = 101,
                 ip   = '10.0.1.2/24',
                 defaultRoute = 'via 10.0.1.1')
         h2 = self.addHost(
                 'h2',
-                cls  = VLANHost,
+                #cls  = VLANHost,
                 vlan = 106,
                 ip = '10.0.6.2/24',
                 defaultRoute = 'via 10.0.6.1')
 
-        s1 = self.addSwitch('s1')
-        s2 = self.addSwitch('s2')
-        s3 = self.addSwitch('s3')
-        s4 = self.addSwitch('s4')
+        s1 = self.addSwitch('s1', protocols='OpenFlow13')
+        s2 = self.addSwitch('s2', protocols='OpenFlow13')
+        s3 = self.addSwitch('s3', protocols='OpenFlow13')
+        s4 = self.addSwitch('s4', protocols='OpenFlow13')
 
-        self.addLink(h1, s1, intf=VLANIntf,
+        self.addLink(h1, s1, #intf=VLANIntf,
                 params2={ 'ip': '10.0.1.1/24', 'vlan': 101 })
-        self.addLink(h2, s4, intf=VLANIntf,
+        self.addLink(h2, s4, #intf=VLANIntf,
                 params2={ 'ip': '10.0.6.1/24', 'vlan': 106 })
-        self.addLink(s1, s2, intf=VLANIntf,
+        self.addLink(s1, s2, #intf=VLANIntf,
                 params1={ 'ip': '10.0.2.1/24', 'vlan': 102 },
                 params2={ 'ip': '10.0.2.2/24', 'vlan': 102 })
-        self.addLink(s2, s4, intf=VLANIntf,
+        self.addLink(s2, s4, #intf=VLANIntf,
                 params1={ 'ip': '10.0.3.2/24', 'vlan': 103 },
                 params2={ 'ip': '10.0.3.1/24', 'vlan': 103 })
-        self.addLink(s1, s3, intf=VLANIntf,
+        self.addLink(s1, s3, #intf=VLANIntf,
                 params1={ 'ip': '10.0.4.1/24', 'vlan': 104 },
                 params2={ 'ip': '10.0.4.2/24', 'vlan': 104 })
-        self.addLink(s3, s4, intf=VLANIntf,
+        self.addLink(s3, s4, #intf=VLANIntf,
                 params1={ 'ip': '10.0.5.1/24', 'vlan': 105 },
                 params2={ 'ip': '10.0.5.2/24', 'vlan': 105 })
 

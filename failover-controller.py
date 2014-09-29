@@ -7,6 +7,7 @@ L3 switch with failover support.
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER
+from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 
@@ -20,9 +21,12 @@ class L3Switch(app_manager.RyuApp):
         ofproto = datapath.ofproto
 
         match = datapath.ofproto_parser.OFPMatch(
-                ipv4_dst = dst_ip)
+                ipv4_dst = (dst_ip, '255.255.255.0'))
 
-        actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
+        actions = [datapath.ofproto_parser.OFPActionOutput(out_port),
+                   datapath.ofproto_parser.OFPActionPopVlan()]
+        inst = [datapath.ofproto_parser.OFPInstructionActions(
+                    ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
         mod = datapath.ofproto_parser.OFPFlowMod(
                 datapath     = datapath,
@@ -33,7 +37,7 @@ class L3Switch(app_manager.RyuApp):
                 hard_timeout = 0,
                 priority     = ofproto.OFP_DEFAULT_PRIORITY,
                 flags        = ofproto.OFPFF_SEND_FLOW_REM,
-                actions      = actions)
+                instructions = inst)
 
         datapath.send_msg(mod)
 
@@ -64,5 +68,11 @@ class L3Switch(app_manager.RyuApp):
         parser = datapath.ofproto_parser
         dpid = ev.msg.datapath_id
 
-        routing_table = []
-        self.add_route(datapath, routing_table[dpid][0], routing_table[dpid][1])
+        self.logger.info("DPID %d comes up", dpid)
+
+        routing_table = [[],
+                         ['10.0.6.0', 2],
+                         ['10.0.6.0', 2],
+                         ['10.0.6.0', 2],
+                         ['10.0.6.0', 1]]
+        #self.add_route(datapath, routing_table[dpid][0], routing_table[dpid][1])
