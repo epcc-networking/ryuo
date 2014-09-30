@@ -111,9 +111,9 @@ def run():
     setLogLevel('debug')
 
     net = Mininet(
-            topo       = FailoverTestTopo(),
-            switch     = OVSSwitch,
-            controller = RemoteController)
+            topo        = FailoverTestTopo(),
+            switch      = OVSSwitch,
+            controller  = RemoteController)
     net.start()
     CLI(net)
     net.stop()

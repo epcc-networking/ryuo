@@ -41,6 +41,25 @@ class L3Switch(app_manager.RyuApp):
 
         datapath.send_msg(mod)
 
+    def send_port_mod(self, port_no, datapath, hw_addr):
+        ofp = datapath.ofproto
+        ofp_parser = datapath.ofproto_parser
+        mask = 0
+        advertise = ()
+        config = 0
+        req = ofp_parser.OFPPortMod(datapath, port_no, hw_addr, config, mask,
+                advertise)
+        datapath.send_msg(req)
+
+    def flood_entry(self, datapath, all_ports, enabled_ports):
+        ofproto = datapath.ofproto
+        ofproto_parser = datapath.ofproto_paser
+        for in_port in all_ports:
+            match = ofproto_parser.OFPMatch(eth_dst = 'ff:ff:ff:ff:ff:ff',
+                                            in_port = in_port)
+            actions = [ofproto_parser.OF]
+
+
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
         msg = ev.msg
@@ -75,4 +94,4 @@ class L3Switch(app_manager.RyuApp):
                          ['10.0.6.0', 2],
                          ['10.0.6.0', 2],
                          ['10.0.6.0', 1]]
-        #self.add_route(datapath, routing_table[dpid][0], routing_table[dpid][1])
+        self.add_route(datapath, routing_table[dpid][0], routing_table[dpid][1])
