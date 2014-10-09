@@ -9,6 +9,7 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
+from ryu.ofproto import ether
 from ryu.ofproto import ofproto_v1_3
 
 class L3Switch(app_manager.RyuApp):
@@ -21,10 +22,10 @@ class L3Switch(app_manager.RyuApp):
         ofproto = datapath.ofproto
 
         match = datapath.ofproto_parser.OFPMatch(
+                eth_type = 0x800,
                 ipv4_dst = (dst_ip, '255.255.255.0'))
 
-        actions = [datapath.ofproto_parser.OFPActionOutput(out_port),
-                   datapath.ofproto_parser.OFPActionPopVlan()]
+        actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
         inst = [datapath.ofproto_parser.OFPInstructionActions(
                     ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
@@ -90,8 +91,45 @@ class L3Switch(app_manager.RyuApp):
         self.logger.info("DPID %d comes up", dpid)
 
         routing_table = [[],
-                         ['10.0.6.0', 2],
-                         ['10.0.6.0', 2],
-                         ['10.0.6.0', 2],
-                         ['10.0.6.0', 1]]
+                         ['10.0.6.2', 2],
+                         ['10.0.6.2', 2],
+                         ['10.0.6.2', 2],
+                         ['10.0.6.2', 1]]
         self.add_route(datapath, routing_table[dpid][0], routing_table[dpid][1])
+        # Flow Miss
+        match = parser.OFPMatch()
+        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
+                                          ofproto.OFPCML_NO_BUFFER)]
+        self.add_flow(datapath, 0, match, actions)
+
+    
+    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+    def packet_in_handler(self, ev):
+        msg = ev.msg
+        datapath = msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        data = None
+        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+            data = msg.data
+        out = parser.OFPPacketOut(
+                datapath = datapath,
+                buffer_id = msg.buffer_id,
+                in_port = msg.match['in_port'],
+                actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)],
+                data = None)
+        
+        datapath.send_msg(out)
+        self.logger.info("Packet in");
+
+    def add_flow(self, datapath, priority, match, actions):
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+
+        mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
+                                match=match, instructions=inst)
+        datapath.send_msg(mod)
+
