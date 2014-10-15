@@ -222,22 +222,28 @@ class RestRouterAPI(app_manager.RyuApp):
 
         wsgi = kwargs['wsgi']
         self.waiters = {}
-        self.data = {'waiters': self.waiters}
+        self.data = {'waiters': self.waiters, 'app': self}
 
         mapper = wsgi.mapper
         wsgi.registory['RouterController'] = self.data
-        wsgi.register(TopoController, {'app': self, 'logger': self.logger})
         requirements = {'switch_id': SWITCHID_PATTERN,
                         'vlan_id': VLANID_PATTERN,
                         'port_no': PORTNO_PATTERN}
         # For topology
-        path = '/topo/discovery'
-        mapper.connect('topo', path, controller=TopoController,
-                       action='discovery',
+        path = '/router/topo_discovery'
+        mapper.connect('topo', path, controller=RouterController,
+                       action='topo_discovery',
                        conditions=dict(method=['POST']))
-        path = '/topo/routing'
-        mapper.connect('topo', path, controller=TopoController,
+        path = '/router/routing'
+        mapper.connect('topo', path, controller=RouterController,
                        action='routing',
+                       conditions=dict(method=['POST']))
+
+        # Flow commands
+        path = '/router/flush'
+        mapper.connect('router', path, controller=RouterController,
+                       requirements=requirements,
+                       action='flush',
                        conditions=dict(method=['POST']))
 
         # For no vlan data
@@ -254,6 +260,18 @@ class RestRouterAPI(app_manager.RyuApp):
                        requirements=requirements,
                        action='delete_data',
                        conditions=dict(method=['DELETE']))
+        
+        # Pre port config
+        path = '/router/{switch_id}/{port_no}'
+        mapper.connect('router', path, controller=RouterController,
+                       requirements=requirements,
+                       action='set_data',
+                       conditions=dict(method=['POST']))
+        mapper.connect('router', path, controller=RouterController,
+                       requirements=requirements,
+                       action='delete_data',
+                       conditions=dict(method=['DELETE']))
+
         # For vlan data
         path = '/router/{switch_id}/{vlan_id}'
         mapper.connect('router', path, controller=RouterController,
@@ -338,44 +356,18 @@ def rest_command(func):
     return _rest_command
 
 
-class TopoController(ControllerBase):
-
-    def __init__(self, req, link, data, **config):
-        super(TopoController, self).__init__(req, link, data, **config)
-        self.app = data['app']
-        self.logger = data['logger']
-    
-    # POST /topo/discovery
-    @rest_command
-    def discovery(self, req, **kwargs):
-        links = self._get_all_links()
-        return [link.to_dict() for link in links]
-
-    # POST /topo/routing
-    @rest_command
-    def routing(self, req, **kwargs):
-        return None
-
-    def _get_all_switches(self):
-        switches = get_all_switch(self.app)
-        self.logger.info(str(switches))
-        return switches
-    
-    def _get_all_links(self):
-        links = get_all_link(self.app)
-        self.logger.info(str(links))
-        return links
-
-
-    
+   
 class RouterController(ControllerBase):
 
     _ROUTER_LIST = {}
+    _SWITCHES = None
+    _LINKS = None
     _LOGGER = None
 
     def __init__(self, req, link, data, **config):
         super(RouterController, self).__init__(req, link, data, **config)
         self.waiters = data['waiters']
+        self.app = data['app']
 
     @classmethod
     def set_logger(cls, logger):
@@ -413,49 +405,130 @@ class RouterController(ControllerBase):
             router = cls._ROUTER_LIST[dp_id]
             router.packet_in_handler(msg)
 
+    # POST /router/topo_discovery
+    @rest_command
+    def topo_discovery(self, req, **kwargs):
+        self._LINKS = self._get_all_links()
+        self._SWITCHES = self._get_all_switches()
+        return {'links': [link.to_dict() for link in self._LINKS],
+                'switches': [switch.to_dict() for switch in self._SWITCHES]}
+
+    # POST /router/routing
+    @rest_command 
+    def routing(self, req, **kwargs):
+        self._LINKS = self._get_all_links()
+        self._SWITCHES = self._get_all_switches()
+
+        if self._LINKS == None or self._SWITCHES == None:
+            raise CommandFailure("Please run topo doscopvery first")
+        dpids = [switch.ports[0].dpid for switch in self._SWITCHES]
+        self._LOGGER.info(str(dpids), extra={'sw_id': 0})
+        graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids} 
+                    for src_dpid in dpids}
+        via = {src_dpid: {dst_dpid: None for dst_dpid in dpids} 
+                    for src_dpid in dpids}
+        tmp_graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids} 
+                    for src_dpid in dpids}
+        for link in self._LINKS:
+            graph[link.src.dpid][link.dst.dpid] = link
+            via[link.src.dpid][link.dst.dpid] = '-'
+            tmp_graph[link.src.dpid][link.dst.dpid] = 1
+        self._LOGGER.info(str(graph), extra={'sw_id': 0})
+        # Shorest path routing for each node
+        # TODO Support multiple vlans
+        for k in dpids:
+            for src in dpids:
+                for dst in dpids:
+                    if src == dst: 
+                        continue
+                    src_k = tmp_graph[src][k]
+                    k_dst = tmp_graph[k][dst]
+                    src_dst = tmp_graph[src][dst]
+                    if (src_k != None and k_dst != None and
+                            (src_dst == None or src_dst > src_k + k_dst)):
+                        tmp_graph[src][dst] = src_k + k_dst
+                        tmp_k = k
+                        if graph[src][k] != None:
+                            via[src][dst] = graph[src][k]
+                        else:
+                            via[src][dst] = via[src][k]
+        # Inter Router routing.
+        for src in dpids:
+            vlan_router = self._get_router(src)[VLANID_NONE]
+            for dst in dpids:
+                addrs = self._get_router(dst)[VLANID_NONE].address_data
+                for addr in addrs.keys():
+                    vlan_router.set_routing_data(addr, )
+                 
+        return via
+
+    def _get_all_switches(self):
+        switches = get_all_switch(self.app)
+        return switches
+    
+    def _get_all_links(self):
+        links = get_all_link(self.app)
+        return links
+
+    # POST /router/flush
+    @rest_command
+    def flush(self, req, **_kwargs):
+        # TODO force install/update flow entries.
+        return
+
     # GET /router/{switch_id}
     @rest_command
     def get_data(self, req, switch_id, **_kwargs):
-        return self._access_router(switch_id, VLANID_NONE,
+        return self._access_router(switch_id, VLANID_NONE, None,
                                    'get_data', req.body)
 
     # GET /router/{switch_id}/{vlan_id}
     @rest_command
     def get_vlan_data(self, req, switch_id, vlan_id, **_kwargs):
-        return self._access_router(switch_id, vlan_id,
+        return self._access_router(switch_id, vlan_id, None,
                                    'get_data', req.body)
 
     # POST /router/{switch_id}
     @rest_command
     def set_data(self, req, switch_id, **_kwargs):
-        return self._access_router(switch_id, VLANID_NONE,
+        return self._access_router(switch_id, VLANID_NONE, None,
+                                   'set_data', req.body)
+
+    # POST /router/{switch_id}/{port_no}
+    def set_data(self, req, switch_id, port_no, **_kwargs):
+        return self._access_router(switch_id, VLANID_NONE, port_no,
                                    'set_data', req.body)
 
     # POST /router/{switch_id}/{vlan_id}
     @rest_command
     def set_vlan_data(self, req, switch_id, vlan_id, **_kwargs):
-        return self._access_router(switch_id, vlan_id,
+        return self._access_router(switch_id, vlan_id, None,
                                    'set_data', req.body)
 
     # DELETE /router/{switch_id}
     @rest_command
     def delete_data(self, req, switch_id, **_kwargs):
-        return self._access_router(switch_id, VLANID_NONE,
+        return self._access_router(switch_id, VLANID_NONE, None,
                                    'delete_data', req.body)
-
+    
+    # DELETE /router/{switch_id}/{port_no}
+    def delete_data(self, req, switch_id, port_no, **_kwargs):
+        return self._access_router(switch_id, VLANID_NONE, port_no,
+                                   'delete_data', req.body)
+    
     # DELETE /router/{switch_id}/{vlan_id}
     @rest_command
     def delete_vlan_data(self, req, switch_id, vlan_id, **_kwargs):
-        return self._access_router(switch_id, vlan_id,
+        return self._access_router(switch_id, vlan_id, None,
                                    'delete_data', req.body)
 
-    def _access_router(self, switch_id, vlan_id, func, rest_param):
+    def _access_router(self, switch_id, vlan_id, port_no, func, rest_param):
         rest_message = []
         routers = self._get_router(switch_id)
         param = eval(rest_param) if rest_param else {}
         for router in routers.values():
             function = getattr(router, func)
-            data = function(vlan_id, param, self.waiters)
+            data = function(vlan_id, port_no, param, self.waiters)
             rest_message.append(data)
 
         return rest_message
@@ -554,7 +627,7 @@ class Router(dict):
             vlan_router.delete(waiters)
             del self[vlan_id]
 
-    def get_data(self, vlan_id, dummy1, dummy2):
+    def get_data(self, vlan_id, port_no, dummy1, dummy2):
         vlan_routers = self._get_vlan_router(vlan_id)
         if vlan_routers:
             msgs = [vlan_router.get_data() for vlan_router in vlan_routers]
@@ -564,7 +637,7 @@ class Router(dict):
         return {REST_SWITCHID: self.dpid_str,
                 REST_NW: msgs}
 
-    def set_data(self, vlan_id, param, waiters):
+    def set_data(self, vlan_id, port_no, param, waiters):
         vlan_routers = self._get_vlan_router(vlan_id)
         if not vlan_routers:
             vlan_routers = [self._add_vlan_router(vlan_id)]
@@ -585,7 +658,7 @@ class Router(dict):
         return {REST_SWITCHID: self.dpid_str,
                 REST_COMMAND_RESULT: msgs}
 
-    def delete_data(self, vlan_id, param, waiters):
+    def delete_data(self, vlan_id, port_no, param, waiters):
         msgs = []
         vlan_routers = self._get_vlan_router(vlan_id)
         if vlan_routers:
@@ -725,15 +798,16 @@ class VlanRouter(object):
                 routing_data.append(data)
         return {REST_ROUTE: routing_data}
 
-    def set_data(self, data):
+    def set_data(self, port_no, data):
         details = None
 
         try:
             # Set address data
             if REST_ADDRESS in data:
                 address = data[REST_ADDRESS]
-                address_id = self._set_address_data(address)
-                details = 'Add address [address_id=%d]' % address_id
+                address_id = self._set_address_data(port_no, address)
+                details = ('Add address [address_id=%d] to port %s'
+                           % (address_id, port_no))
             # Set routing data
             elif REST_GATEWAY in data:
                 gateway = data[REST_GATEWAY]
@@ -754,8 +828,8 @@ class VlanRouter(object):
         else:
             raise ValueError('Invalid parameter.')
 
-    def _set_address_data(self, address):
-        address = self.address_data.add(address)
+    def _set_address_data(self, port_no, address):
+        address = self.address_data.add(port_no, address)
 
         cookie = self._id_to_cookie(REST_ADDRESSID, address.address_id)
 
@@ -789,9 +863,30 @@ class VlanRouter(object):
                          cookie, extra=self.sw_id)
 
         # Send GARP
-        self.send_arp_request(address.default_gw, address.default_gw)
+        self.send_arp_request(address.default_gw, address.default_gw,
+                              port_no=port_no)
 
         return address.address_id
+
+    def set_routing_data(self, destination, nhop_mac, nhop_ip):
+        err_msg = 'Invalid [%s] value.' % REST_GATEWAY 
+        dst_ip = ip_addr_aton(nhop_ip, err_msg=err_msg)
+        address = self.address_data.get_data(ip=dst_ip)
+        if address == None:
+            msg = "Gateway=%s's address is not registered." % nhop_ip
+            raise CommandFailure(msg=msg)
+        elif dst_ip == address.default_gw:
+            msg = "Gateway=%s is used as default gateway of address_id=%d" \
+                    % (gateway, address.address_id)
+            raise CommandFailure(msg=msg)
+        else:
+            src_ip = address.default_gw
+            route = self.routing_tbl.add(destination, nhop_ip)
+            self._set_route_packetin(route)
+            self.send_arp_request(src_ip, dst_ip)
+            return route.route_id 
+         
+        return self._set_routing_data(destination, gateway)
 
     def _set_routing_data(self, destination, gateway):
         err_msg = 'Invalid [%s] value.' % REST_GATEWAY
@@ -1166,9 +1261,12 @@ class VlanRouter(object):
             address = self.address_data.get_data(ip=gateway)
             self.send_arp_request(address.default_gw, gateway)
 
-    def send_arp_request(self, src_ip, dst_ip, in_port=None):
+    def send_arp_request(self, src_ip, dst_ip, in_port=None, port_no=None):
         # Send ARP request from all ports.
-        for send_port in self.port_data.values():
+        ports = [port_no]
+        if port_no is None:
+            ports = self.port_data.vlaues()
+        for send_port in ports:
             if in_port is None or in_port != send_port.port_no:
                 src_mac = send_port.mac
                 dst_mac = mac_lib.BROADCAST_STR
@@ -1295,7 +1393,7 @@ class AddressData(dict):
         super(AddressData, self).__init__()
         self.address_id = 1
 
-    def add(self, address):
+    def add(self, port_no, address):
         err_msg = 'Invalid [%s] value.' % REST_ADDRESS
         nw_addr, mask, default_gw = nw_addr_aton(address, err_msg=err_msg)
 
@@ -1308,8 +1406,13 @@ class AddressData(dict):
                                                err_msg)):
                 msg = 'Address overlaps [address_id=%d]' % other.address_id
                 raise CommandFailure(msg=msg)
+        
+        # Check if port has already been assigned.
+        if port_no in [addr.port_no for addr in self.values()]:
+            msg = 'Address has already assigned to port %s' % port_no
+            raise CommandFailure(msg=msg)
 
-        address = Address(self.address_id, nw_addr, mask, default_gw)
+        address = Address(self.address_id, port_no, nw_addr, mask, default_gw)
         ip_str = ip_addr_ntoa(nw_addr)
         key = '%s/%d' % (ip_str, mask)
         self[key] = address
@@ -1341,11 +1444,18 @@ class AddressData(dict):
                     return address
         return None
 
+    def get_data_by_port(self, port_no):
+        for address in self.values():
+            if address.port_no == port_no:
+                return address
+        return None
+
 
 class Address(object):
-    def __init__(self, address_id, nw_addr, netmask, default_gw):
+    def __init__(self, address_id, port_no, nw_addr, netmask, default_gw):
         super(Address, self).__init__()
         self.address_id = address_id
+        self.port_no = port_no
         self.nw_addr = nw_addr
         self.netmask = netmask
         self.default_gw = default_gw
