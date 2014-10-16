@@ -126,6 +126,8 @@ VLANID_NONE = 0
 VLANID_MIN = 2
 VLANID_MAX = 4094
 
+PORT_NO_NONE = 0
+
 COOKIE_DEFAULT_ID = 0
 COOKIE_SHIFT_VLANID = 32
 COOKIE_SHIFT_ROUTEID = 16
@@ -416,13 +418,14 @@ class RouterController(ControllerBase):
     # POST /router/routing
     @rest_command 
     def routing(self, req, **kwargs):
+        extra = {'sw_id': 0}
         self._LINKS = self._get_all_links()
         self._SWITCHES = self._get_all_switches()
 
-        if self._LINKS == None or self._SWITCHES == None:
+        if self._LINKS is None or self._SWITCHES is None:
             raise CommandFailure("Please run topo doscopvery first")
-        dpids = [switch.ports[0].dpid for switch in self._SWITCHES]
-        self._LOGGER.info(str(dpids), extra={'sw_id': 0})
+        dpids = [dpid_lib.dpid_to_str(switch.ports[0].dpid) for switch in self._SWITCHES]
+        self._LOGGER.info(str(dpids), extra=extra)
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids} 
                     for src_dpid in dpids}
         via = {src_dpid: {dst_dpid: None for dst_dpid in dpids} 
@@ -430,10 +433,12 @@ class RouterController(ControllerBase):
         tmp_graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids} 
                     for src_dpid in dpids}
         for link in self._LINKS:
-            graph[link.src.dpid][link.dst.dpid] = link
-            via[link.src.dpid][link.dst.dpid] = '-'
-            tmp_graph[link.src.dpid][link.dst.dpid] = 1
-        self._LOGGER.info(str(graph), extra={'sw_id': 0})
+            dst_dpid = dpid_lib.dpid_to_str(link.dst.dpid)
+            src_dpid = dpid_lib.dpid_to_str(link.src.dpid)
+            graph[src_dpid][dst_dpid] = link
+            #via[src_dpid][dst_dpid] = '-'
+            tmp_graph[src_dpid][dst_dpid] = 1
+        self._LOGGER.info(str(graph), extra=extra)
         # Shorest path routing for each node
         # TODO Support multiple vlans
         for k in dpids:
@@ -444,21 +449,37 @@ class RouterController(ControllerBase):
                     src_k = tmp_graph[src][k]
                     k_dst = tmp_graph[k][dst]
                     src_dst = tmp_graph[src][dst]
-                    if (src_k != None and k_dst != None and
+                    if (src_k is not None and k_dst is not None and
                             (src_dst == None or src_dst > src_k + k_dst)):
                         tmp_graph[src][dst] = src_k + k_dst
                         tmp_k = k
-                        if graph[src][k] != None:
+                        if graph[src][k] is not None:
                             via[src][dst] = graph[src][k]
                         else:
                             via[src][dst] = via[src][k]
         # Inter Router routing.
         for src in dpids:
-            vlan_router = self._get_router(src)[VLANID_NONE]
+            vlan_router = self._get_router(src)[int(src)][VLANID_NONE]
             for dst in dpids:
-                addrs = self._get_router(dst)[VLANID_NONE].address_data
+                if src == dst:
+                    continue
+                addrs = (self._get_router(dst)[int(dst)][VLANID_NONE]
+                             .address_data)
+                out_link = via[src][dst]
+                if out_link is None:
+                    continue
+                self._LOGGER.info(out_link, extra=extra)
+                gateway_dpid = dpid_lib.dpid_to_str(out_link.dst.dpid)
                 for addr in addrs.keys():
-                    vlan_router.set_routing_data(addr, )
+                    self._LOGGER.info(addr.to_dict())
+                    gateway_ip = (self
+                                  ._get_router(gateway_dpid)[out_link.dst.dpid][VLANID_NONE]
+                                  .address_data
+                                  .get_data_by_port(out_link.dst.port_no)
+                                  .nw_addr)
+                    vlan_router.set_routing_data(addr, out_link.dst.mac,
+                                                 gateway_ip,
+                                                 out_link.src.port_no)
                  
         return via
 
@@ -495,7 +516,10 @@ class RouterController(ControllerBase):
                                    'set_data', req.body)
 
     # POST /router/{switch_id}/{port_no}
+    @rest_command
     def set_data(self, req, switch_id, port_no, **_kwargs):
+        if port_no == 0:
+            port_no = PORT_NO_NONE 
         return self._access_router(switch_id, VLANID_NONE, port_no,
                                    'set_data', req.body)
 
@@ -645,7 +669,7 @@ class Router(dict):
         msgs = []
         for vlan_router in vlan_routers:
             try:
-                msg = vlan_router.set_data(param)
+                msg = vlan_router.set_data(port_no, param)
                 msgs.append(msg)
                 if msg[REST_RESULT] == REST_NG:
                     # Data setting is failure.
@@ -811,12 +835,12 @@ class VlanRouter(object):
             # Set routing data
             elif REST_GATEWAY in data:
                 gateway = data[REST_GATEWAY]
-                if REST_DESTINATION in data:
-                    destination = data[REST_DESTINATION]
-                else:
-                    destination = DEFAULT_ROUTE
-                route_id = self._set_routing_data(destination, gateway)
-                details = 'Add route [route_id=%d]' % route_id
+                #if REST_DESTINATION in data:
+                #    destination = data[REST_DESTINATION]
+                #else:
+                #    destination = DEFAULT_ROUTE
+                #route_id = self._set_routing_data(destination, gateway)
+                #details = 'Add route [route_id=%d]' % route_id
 
         except CommandFailure as err_msg:
             msg = {REST_RESULT: REST_NG, REST_DETAILS: str(err_msg)}
@@ -863,17 +887,16 @@ class VlanRouter(object):
                          cookie, extra=self.sw_id)
 
         # Send GARP
-        self.send_arp_request(address.default_gw, address.default_gw,
-                              port_no=port_no)
+        self.send_arp_request(address.default_gw, address.default_gw)
 
         return address.address_id
 
-    def set_routing_data(self, destination, nhop_mac, nhop_ip):
+    def set_routing_data(self, destination, gateway_mac, gateway_ip, outport):
         err_msg = 'Invalid [%s] value.' % REST_GATEWAY 
-        dst_ip = ip_addr_aton(nhop_ip, err_msg=err_msg)
+        dst_ip = ip_addr_aton(gateway_ip, err_msg=err_msg)
         address = self.address_data.get_data(ip=dst_ip)
         if address == None:
-            msg = "Gateway=%s's address is not registered." % nhop_ip
+            msg = "Gateway=%s's address is not registered." % gateway_ip
             raise CommandFailure(msg=msg)
         elif dst_ip == address.default_gw:
             msg = "Gateway=%s is used as default gateway of address_id=%d" \
@@ -881,13 +904,11 @@ class VlanRouter(object):
             raise CommandFailure(msg=msg)
         else:
             src_ip = address.default_gw
-            route = self.routing_tbl.add(destination, nhop_ip)
+            route = self.routing_tbl.add(destination, gateway_ip, gateway_mac)
             self._set_route_packetin(route)
-            self.send_arp_request(src_ip, dst_ip)
+            self.send_arp_request(src_ip, dst_ip, port=Port(port_no, gateway_mac))
             return route.route_id 
          
-        return self._set_routing_data(destination, gateway)
-
     def _set_routing_data(self, destination, gateway):
         err_msg = 'Invalid [%s] value.' % REST_GATEWAY
         dst_ip = ip_addr_aton(gateway, err_msg=err_msg)
@@ -1261,11 +1282,11 @@ class VlanRouter(object):
             address = self.address_data.get_data(ip=gateway)
             self.send_arp_request(address.default_gw, gateway)
 
-    def send_arp_request(self, src_ip, dst_ip, in_port=None, port_no=None):
+    def send_arp_request(self, src_ip, dst_ip, in_port=None, port=None):
         # Send ARP request from all ports.
-        ports = [port_no]
-        if port_no is None:
-            ports = self.port_data.vlaues()
+        ports = [port]
+        if port is None:
+            ports = self.port_data.values()
         for send_port in ports:
             if in_port is None or in_port != send_port.port_no:
                 src_mac = send_port.mac
@@ -1294,6 +1315,20 @@ class VlanRouter(object):
             dstip = ip_addr_ntoa(packet_buffer.dst_ip)
             self.logger.info('Send ICMP destination unreachable to [%s].',
                              dstip, extra=self.sw_id)
+
+    def _install_routing_entry(self, route, outport, src_mac, dst_mac):
+        cookie = self._id_to_cookie(REST_ROUTEID, route.route_id)
+        priority, log_msg = self._get_priority(PRIORITY_TYPE_ROUTE,
+                                              route=route)
+        seklf.ofctl.set_routing_flow(cookie, priority, int(outport),
+                                     dl_vlan=self.vlan_id,
+                                     src_mac=src_mac,
+                                     dst_mac=dst_mac,
+                                     nw_dst=route.dst_ip,
+                                     dst_mask=route.netmask,
+                                     dec_ttl=True)
+        self.logger.info('Set %s flow [cookie=0x%x]', log_msg, cookie,
+                         extra=self.sw_id)
 
     def _update_routing_tbl(self, msg, header_list):
         # Set flow: routing to gateway.
@@ -1469,7 +1504,7 @@ class RoutingTable(dict):
         super(RoutingTable, self).__init__()
         self.route_id = 1
 
-    def add(self, dst_nw_addr, gateway_ip):
+    def add(self, dst_nw_addr, gateway_ip, gateway_mac):
         err_msg = 'Invalid [%s] value.'
 
         if dst_nw_addr == DEFAULT_ROUTE:
@@ -1493,7 +1528,8 @@ class RoutingTable(dict):
             msg = 'Destination overlaps [route_id=%d]' % overlap_route
             raise CommandFailure(msg=msg)
 
-        routing_data = Route(self.route_id, dst_ip, netmask, gateway_ip)
+        routing_data = Route(self.route_id, dst_ip, netmask, gateway_ip,
+                             gateway_mac)
         ip_str = ip_addr_ntoa(dst_ip)
         key = '%s/%d' % (ip_str, netmask)
         self[key] = routing_data
@@ -1539,13 +1575,13 @@ class RoutingTable(dict):
 
 
 class Route(object):
-    def __init__(self, route_id, dst_ip, netmask, gateway_ip):
+    def __init__(self, route_id, dst_ip, netmask, gateway_ip, gateway_mac):
         super(Route, self).__init__()
         self.route_id = route_id
         self.dst_ip = dst_ip
         self.netmask = netmask
         self.gateway_ip = gateway_ip
-        self.gateway_mac = None
+        self.gateway_mac = gateway_mac 
 
 
 class SuspendPacketList(list):
