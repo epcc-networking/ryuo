@@ -436,7 +436,7 @@ class RouterController(ControllerBase):
             dst_dpid = dpid_lib.dpid_to_str(link.dst.dpid)
             src_dpid = dpid_lib.dpid_to_str(link.src.dpid)
             graph[src_dpid][dst_dpid] = link
-            #via[src_dpid][dst_dpid] = '-'
+            via[src_dpid][dst_dpid] = link
             tmp_graph[src_dpid][dst_dpid] = 1
         self._LOGGER.info(str(graph), extra=extra)
         # Shorest path routing for each node
@@ -470,18 +470,29 @@ class RouterController(ControllerBase):
                     continue
                 self._LOGGER.info(out_link, extra=extra)
                 gateway_dpid = dpid_lib.dpid_to_str(out_link.dst.dpid)
-                for addr in addrs.keys():
-                    self._LOGGER.info(addr.to_dict())
+                for addrv in addrs.values():
+                    addr = addrv.nw_addr
+                    dst_str = '%s/%d' % (addr, addrv.netmask)
+
+                    self._LOGGER.info(dst_str, extra=extra)
+                    self._LOGGER.info(out_link.src.port_no, extra=extra)
                     gateway_ip = (self
                                   ._get_router(gateway_dpid)[out_link.dst.dpid][VLANID_NONE]
                                   .address_data
                                   .get_data_by_port(out_link.dst.port_no)
-                                  .nw_addr)
-                    vlan_router.set_routing_data(addr, out_link.dst.mac,
+                                  .default_gw)
+                    self._LOGGER.info(gateway_ip, extra=extra)
+                    vlan_router.set_routing_data(dst_str,
+                                                 out_link.src.hw_addr,
+                                                 out_link.dst.hw_addr,
                                                  gateway_ip,
                                                  out_link.src.port_no)
                  
-        return via
+        return {src_dpid: {dst_dpid: via[src_dpid][dst_dpid].to_dict() 
+                                for dst_dpid in dpids
+                                if via[src_dpid][dst_dpid] is not None} 
+                    for src_dpid in dpids}
+
 
     def _get_all_switches(self):
         switches = get_all_switch(self.app)
@@ -853,7 +864,7 @@ class VlanRouter(object):
             raise ValueError('Invalid parameter.')
 
     def _set_address_data(self, port_no, address):
-        address = self.address_data.add(port_no, address)
+        address = self.address_data.add(int(port_no), address)
 
         cookie = self._id_to_cookie(REST_ADDRESSID, address.address_id)
 
@@ -891,7 +902,7 @@ class VlanRouter(object):
 
         return address.address_id
 
-    def set_routing_data(self, destination, gateway_mac, gateway_ip, outport):
+    def set_routing_data(self, destination, outmac, gateway_mac, gateway_ip, outport):
         err_msg = 'Invalid [%s] value.' % REST_GATEWAY 
         dst_ip = ip_addr_aton(gateway_ip, err_msg=err_msg)
         address = self.address_data.get_data(ip=dst_ip)
@@ -905,8 +916,13 @@ class VlanRouter(object):
         else:
             src_ip = address.default_gw
             route = self.routing_tbl.add(destination, gateway_ip, gateway_mac)
-            self._set_route_packetin(route)
-            self.send_arp_request(src_ip, dst_ip, port=Port(port_no, gateway_mac))
+            if route is None:
+                return
+            #self._set_route_packetin(route)
+            #self.send_arp_request(src_ip, dst_ip, port=Port(outport, gateway_mac))
+            #self.send_arp_request(src_ip, dst_ip)
+            self.install_routing_entry(route, outport, outmac, gateway_mac)
+
             return route.route_id 
          
     def _set_routing_data(self, destination, gateway):
@@ -1254,6 +1270,9 @@ class VlanRouter(object):
                 if gw_address is not None:
                     src_ip = gw_address.default_gw
                     dst_ip = route.gateway_ip
+                    self.logger.info("gw addr: %s, route: %s" % (src_ip,
+                                                                 dst_ip),
+                                    extra=self.sw_id)
 
         if src_ip is not None:
             self.packet_buffer.add(in_port, header_list, msg.data)
@@ -1316,11 +1335,11 @@ class VlanRouter(object):
             self.logger.info('Send ICMP destination unreachable to [%s].',
                              dstip, extra=self.sw_id)
 
-    def _install_routing_entry(self, route, outport, src_mac, dst_mac):
+    def install_routing_entry(self, route, outport, src_mac, dst_mac):
         cookie = self._id_to_cookie(REST_ROUTEID, route.route_id)
         priority, log_msg = self._get_priority(PRIORITY_TYPE_ROUTE,
                                               route=route)
-        seklf.ofctl.set_routing_flow(cookie, priority, int(outport),
+        self.ofctl.set_routing_flow(cookie, priority, int(outport),
                                      dl_vlan=self.vlan_id,
                                      src_mac=src_mac,
                                      dst_mac=dst_mac,
@@ -1526,7 +1545,8 @@ class RoutingTable(dict):
 
         if overlap_route is not None:
             msg = 'Destination overlaps [route_id=%d]' % overlap_route
-            raise CommandFailure(msg=msg)
+            return 
+            #raise CommandFailure(msg=msg)
 
         routing_data = Route(self.route_id, dst_ip, netmask, gateway_ip,
                              gateway_mac)

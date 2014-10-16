@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+
+# Addresses
+
+curl -X POST -d '{"address": "10.0.1.1/24"}' http://127.0.0.1:8080/router/0000000000000001/00000001
+
+curl -X POST -d '{"address": "10.0.2.1/24"}' http://127.0.0.1:8080/router/0000000000000001/00000002
+
