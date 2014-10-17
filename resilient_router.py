@@ -949,6 +949,8 @@ class VlanRouter(object):
         outport = None  # for drop
         self.ofctl.set_routing_flow(cookie, priority, outport,
                                     dl_vlan=self.vlan_id)
+        self.ofctl.set_routing_flow_v6(cookie, priority, outport,
+                                       dl_vlan=self.vlan_id)
         self.logger.info('Set default route (drop) flow [cookie=0x%x]',
                          cookie, extra=self.sw_id)
 
@@ -1886,6 +1888,26 @@ class OfCtl_v1_0(OfCtl):
                       nw_dst=nw_dst, dst_mask=dst_mask,
                       idle_timeout=idle_timeout, actions=actions)
 
+    def set_routing_flow_v6(self, cookie, priority, outport, dl_vlan=0,
+                            nw_src=0, src_mask=128, nw_dst=0, dst_mask=128,
+                            src_mac=0, dst_mac=0, idle_timeout=0, **dummy):
+        ofp_parser = self.dp.ofproto_parser
+        dl_type = ether.ETH_TYPE_IPV6
+        actions = []
+        if src_mac:
+            actions.append(ofp_parser.OFPActionSetDlSrc(
+                           mac_lib.haddr_to_bin(src_mac)))
+        if dst_mac:
+            actions.append(ofp_parser.OFPActionSetDlSrc(
+                           mac_lib.haddr_to_bin(dst_mac)))
+        if outport is not None:
+            actions.append(ofp_parser.OFPActionOutput(outport))
+
+        self.set_flow(cookie, priority, dl_type=dl_type, dl_vlan=dl_vlan,
+                      nw_src=nw_src, src_mask=src_mask,
+                      nw_dst=nw_dst, dst_mask=dst_mask,
+                      idle_timeout=idle_timeout, actions=actions)
+
     def delete_flow(self, flow_stats):
         match = flow_stats.match
         cookie = flow_stats.cookie
@@ -1977,6 +1999,30 @@ class OfCtl_after_v1_2(OfCtl):
                       nw_src=nw_src, src_mask=src_mask,
                       nw_dst=nw_dst, dst_mask=dst_mask,
                       idle_timeout=idle_timeout, actions=actions)
+
+    def set_routing_flow_v6(self, cookie, priority, outport, dl_vlan=0,
+                         nw_src=0, src_mask=128, nw_dst=0, dst_mask=128,
+                         src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False):
+        ofp = self.dp.ofproto
+        ofp_parser = self.dp.ofproto_parser
+
+        dl_type = ether.ETH_TYPE_IPV6
+
+        actions = []
+        if dec_ttl:
+            actions.append(ofp_parser.OFPActionDecNwTtl())
+        if src_mac:
+            actions.append(ofp_parser.OFPActionSetField(eth_src=src_mac))
+        if dst_mac:
+            actions.append(ofp_parser.OFPActionSetField(eth_dst=dst_mac))
+        if outport is not None:
+            actions.append(ofp_parser.OFPActionOutput(outport, 0))
+
+        self.set_flow(cookie, priority, dl_type=dl_type, dl_vlan=dl_vlan,
+                      nw_src=nw_src, src_mask=src_mask,
+                      nw_dst=nw_dst, dst_mask=dst_mask,
+                      idle_timeout=idle_timeout, actions=actions)
+
 
     def delete_flow(self, flow_stats):
         ofp = self.dp.ofproto
