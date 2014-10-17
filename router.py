@@ -359,7 +359,7 @@ class OfCtl():
         csum = 0
         offset = ethernet.ethernet._MIN_LEN
 
-        if vlan_id != VLANID_NONE:
+        if vlan_id != None:
             ether_proto = ether.ETH_TYPE_8021Q
             pcp = 0
             cfi = 0
@@ -398,7 +398,7 @@ class OfCtl():
 
         pkt = packet.Packet()
         pkt.add_protocol(e)
-        if vlan_id != VLANID_NONE:
+        if vlan_id != None:
             pkt.add_protocol(v)
         pkt.add_protocol(i)
         pkt.add_protocol(ic)
@@ -408,6 +408,48 @@ class OfCtl():
         self.send_packet_out(in_port, self.dp.ofproto.OFPP_IN_PORT,
                              pkt.data, data_str=str(pkt))
 
+    def send_arp(self, arp_opcode, vlan_id, src_mac, dst_mac,
+                 src_ip, dst_ip, arp_target_mac, in_port, output):
+        # Generate ARP packet
+        if vlan_id != None:
+            ether_proto = ether.ETH_TYPE_8021Q
+            pcp = 0
+            cfi = 0
+            vlan_ether = ether.ETH_TYPE_ARP
+            v = vlan.vlan(pcp, cfi, vlan_id, vlan_ether)
+        else:
+            ether_proto = ether.ETH_TYPE_ARP
+        hwtype = 1
+        arp_proto = ether.ETH_TYPE_IP
+        hlen = 6
+        plen = 4
+
+        pkt = packet.Packet()
+        e = ethernet.ethernet(dst_mac, src_mac, ether_proto)
+        a = arp.arp(hwtype, arp_proto, hlen, plen, arp_opcode,
+                    src_mac, src_ip, arp_target_mac, dst_ip)
+        pkt.add_protocol(e)
+        if vlan_id != None:
+            pkt.add_protocol(v)
+        pkt.add_protocol(a)
+        pkt.serialize()
+
+        # Send packet out
+        self.send_packet_out(in_port, output, pkt.data, data_str=str(pkt))
+
+    def send_icmp_unreach_error(self, packet_buffer):
+        # Send ICMP host unreach error.
+        src_ip = self._get_send_port_ip(packet_buffer.header_list)
+        if src_ip is not None:
+            self.ofctl.send_icmp(packet_buffer.in_port,
+                                 packet_buffer.header_list,
+                                 self.vlan_id,
+                                 icmp.ICMP_DEST_UNREACH,
+                                 icmp.ICMP_HOST_UNREACH_CODE,
+                                 msg_data=packet_buffer.data,
+                                 src_ip=src_ip)
+
+            dstip = ip_addr_ntoa(packet_buffer.dst_ip)
 
 
 
