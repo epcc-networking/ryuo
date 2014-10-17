@@ -207,6 +207,43 @@ class Router():
         return [port.ip for port in self.ports]
 
     def _packet_in_arp(self, msg, headers):
+        src_port = self.ports.get_by_ip(headers[ARP].src_ip) 
+        if src_port is None:
+            return
+        in_port = self.ofctl.get_packetin_inport(msg)
+        src_ip = headers[ARP].src_ip
+        dst_ip = headers[ARP].dst_ip
+        src_ip_str = ip_addr_ntoa(src_ip) 
+        dst_ip_str = ip_addr_ntoa(dst_ip)
+        rt_ips = self.get_ips()
+        if src_ip == dst_ip:
+            output = self.ofctl.dp.ofproto.OFPP_NORMAL
+            self.ofctl.send_packet_out(in_port, output, msg.data)
+        elif dst_ip not in rt_ips:
+            dst_port = self.ports.get_port(dst_ip)
+            if (dst_port is not None
+                and src_port.ip == dst_port.ip):
+                output = self.ofctl.dp.ofproto.OFPP_NORMAL
+                self.ofctl.send_packet_out(in_port, output, msg.data)
+        else:
+            if headers[ARP].opcode == arp.ARP_REV_REQUEST:
+                src_mac = headers[ARP].src_mac
+                dst_mac = self.ports[in_port].mac
+                arp_target_mac = dst_mac
+                output = in_port
+                in_port = self.ofctl.dp.ofproto.OFPP_CONTROLLER
+                self.ofctl.send_arp(arp.ARP_REPLY, dst_mac, src_mac, dst_ip,
+                                    src_ip, arp_target_mac, in_port, output)
+            elif headers[ARP].opcode == arp.ARP_REPLY:
+                packet_list = self.packet_buffer.get_data(src_ip)
+                if packet_list:
+                    for suspend_packet in packet_list:
+                        self.packet_buffer.delete(pkt=suspend_packet)
+                    output = self.ofctl.dp.ofproto.OFPP_TABLE
+                    for suspend_packet in packet_list:
+                        self.ofctl.send_packet_out(suspend_packet.in_port,
+                                                   output,
+                                                   suspend_packet.data)
         return 
 
     def _packet_in_invalid_ttl(self, msg, headers):
@@ -220,6 +257,11 @@ class Router():
         self.ofctl.send_icmp(in_port, headers, icmp.ICMP_ECHO_REPLY,
                              icmp.ICMP_ECHO_REPLY_CODE,
                              icmp_data=headers[ICMP].data)
+
+    def _packet_in_tcp_udp(self, msg, headers):
+        in_port = self.ofctl.get_packetin_inport(msg)
+        self.ofctl.send_icmp(in_port, headers, icmp.ICMP_DEST_UNREACH,
+                             icmp.ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
 
 class Ports(dict):
     def __init__(self, ports):
@@ -499,6 +541,7 @@ def get_priority(priority_type, vid=0, route=None):
         return priority
     else:
         return priority, log_msg
+
 
 def ip_addr_aton(ip_str, err_msg=None):
     try:
