@@ -1,0 +1,24 @@
+#!/usr/bin/bash
+
+# Addresses
+
+curl -X POST -d '{"address": "10.0.1.1/24"}' http://127.0.0.1:8080/router/0000000000000001/00000001/address
+
+curl -X POST -d '{"address": "10.0.2.1/24"}' http://127.0.0.1:8080/router/0000000000000001/00000002/address
+
+curl -X POST -d '{"address": "10.0.4.1/24"}' http://127.0.0.1:8080/router/0000000000000001/00000003/address
+
+curl -X POST -d '{"address": "10.0.2.2/24"}' http://127.0.0.1:8080/router/0000000000000002/00000001/address
+
+curl -X POST -d '{"address": "10.0.3.1/24"}' http://127.0.0.1:8080/router/0000000000000002/00000002/address
+
+curl -X POST -d '{"address": "10.0.3.2/24"}' http://127.0.0.1:8080/router/0000000000000004/00000002/address
+
+curl -X POST -d '{"address": "10.0.5.2/24"}' http://127.0.0.1:8080/router/0000000000000004/00000003/address
+
+curl -X POST -d '{"address": "10.0.6.1/24"}' http://127.0.0.1:8080/router/0000000000000004/00000001/address
+
+curl -X POST -d '{"address": "10.0.4.2/24"}' http://127.0.0.1:8080/router/0000000000000003/00000001/address
+
+curl -X POST -d '{"address": "10.0.5.1/24"}' http://127.0.0.1:8080/router/0000000000000003/00000002/address
+
