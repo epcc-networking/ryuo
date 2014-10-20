@@ -1,20 +1,17 @@
-import logging
 import json
+import socket
 import struct
 
 from webob import Response
-
 from ryu.base import app_manager
-
 from ryu.app.wsgi import route
 from ryu.app.wsgi import ControllerBase
 from ryu.app.wsgi import WSGIApplication
-
-from ryu.controller import dpset 
+from ryu.controller import dpset
 from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls
 from ryu.controller.handler import MAIN_DISPATCHER
-
+from ryu.lib import hub
 from ryu.lib import addrconv
 from ryu.lib import dpid as dpid_lib
 from ryu.lib import mac  as mac_lib
@@ -25,74 +22,80 @@ from ryu.lib.packet import ipv4
 from ryu.lib.packet import packet
 from ryu.lib.packet import tcp
 from ryu.lib.packet import udp
-
 from ryu.ofproto import ether
 from ryu.ofproto import inet
 from ryu.ofproto import ofproto_v1_3
-
 from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
+
 MAX_SUSPENDPACKETS = 50  # Threshold of the packet suspends thread count.
+DEFAULT_TTL = 64
+ARP_REPLY_TIMER = 2  # sec
+
+PORTNO_PATTERN = r'[0-9]{1,8}|all'
+ROUTER_ID_PATTERN = dpid_lib.DPID_PATTERN + r'|all'
+
+UINT16_MAX = 0xffff
+UINT32_MAX = 0xffffffff
+UINT64_MAX = 0xffffffffffffffff
+
 
 class RouterRestController(ControllerBase):
-    _PORTNO_PATTERN = r'[0-9]{1,8}|all'
-    _ROUTER_ID_PATTERN = dpid_lib.DPID_PATTERN + r'|all'
-
     def __init__(self, req, link, data, **config):
         super(RouterRestController, self).__init__(req, link, data, **config)
         self.router_app = data['router_app']
 
     @route('topo', '/topo/links', methods=['GET'])
     def get_links(self, req, **kwargs):
-        links = router_app.get_all_links()
+        links = self.router_app.get_all_links()
         return JsonResponse([link.to_dict() for link in links])
 
     @route('topo', '/topo/switches', methods=['GET'])
     def get_switches(self, req, **kwargs):
-        switches = router_app.get_all_switches()
+        switches = self.router_app.get_all_switches()
         return JsonResponse([switch.to_dict() for switch in switches])
 
     @route('route', '/router/{router_id}', methods=['GET'],
-           requirements={'router_id': self._ROUTER_ID_PATTERN})
+           requirements={'router_id': ROUTER_ID_PATTERN})
     def get_router(self, req, **kwargs):
-        router = router_app.get_router(int(kwargs['router_id']))
+        router = self.router_app.get_router(int(kwargs['router_id']))
         if router is None:
             return ErrorResponse(404, 'Router not found')
         return JsonResponse(router)
 
     @route('router', '/router/{router_id}/{port_no}', methods=['GET'],
-           requirements={'router_id': self._ROUTER_ID_PATTERN,
-                         'port_no': self._PORTNO_PATTERN})
+           requirements={'router_id': ROUTER_ID_PATTERN,
+                         'port_no': PORTNO_PATTERN})
     def get_port(self, req, **kwargs):
-        return JsonResponse(router_app.get_port(int(kwargs['router_id']),
+        return JsonResponse(self.router_app.get_port(int(kwargs['router_id']),
                                                 int(kwargs['port_no']))) 
 
     @route('router', '/router/{router_id}/{port_no}/address',
            methods=['POST'],
-           requirements={'router_id': self._ROUTER_ID_PATTERN,
-                         'port_no': self._PORTNO_PATTERN})
+           requirements={'router_id': ROUTER_ID_PATTERN,
+                         'port_no': PORTNO_PATTERN})
     def set_port_address(self, req, **kwargs):
         address = kwargs.get('address') 
         if address is None:
             return ErrorResponse(400, 'Empty address.')
         return JsonResponse(address,
-                            router_app.set_port(int(kwargs['router_id']),
-                                                int(kwargs['port_no'])))
+                            self.router_app.set_port(int(kwargs['router_id']),
+                                                     int(kwargs['port_no'])))
 
     @route('router', '/router/{router_id}/{port_no}/address',
            methods=['DELETE'],
-           requirements={'router_id': self._ROUTER_ID_PATTERN,
-                         'port_no': self._PORTNO_PATTERN})
+           requirements={'router_id': ROUTER_ID_PATTERN,
+                         'port_no': PORTNO_PATTERN})
     def delete_port_address(self, req, **kwargs):
         return JsonResponse(
-            router_app.delete_port_address(
+            self.router_app.delete_port_address(
                 int(kwargs['router_id']),
                 int(kwargs['port_no'])))
 
     @route('router', '/router/routing', methods=['POST'])
     def routing(self, req, **kwargs):
-        return JsonResponse(router_app.routing()) 
+        return JsonResponse(self.router_app.routing())
 
 class RouterApp(app_manager.RyuApp):
     
@@ -115,13 +118,13 @@ class RouterApp(app_manager.RyuApp):
         return get_all_switch(self)
 
     def get_router(self, router_id):
-        return None
+        return self.routers[router_id]
 
     def get_port(self, router_id, port_no):
         return None
 
     def set_port_address(self, address, router_id, port_no):
-        router = self.get_router(route_id)
+        router = self.get_router(router_id)
         return router.set_address(address, port_no)
 
     def del_port_address(self, router_id, port_no):
@@ -159,7 +162,7 @@ class RouterApp(app_manager.RyuApp):
                     k_dst = tmp_graph[k][src]
                     src_dst = tmp_graph[src][dst]
                     if (src_k is not None and k_dst is not None and
-                        (src_dst == None or src_dst > src_k + k_dst)):
+                            (src_dst is None or src_dst > src_k + k_dst)):
                         tmp_graph[src][dst] = src_k + k_dst
                         tmp_k = k
                         if graph[src][k] is not None:
@@ -205,14 +208,14 @@ class RouterApp(app_manager.RyuApp):
     def packet_in(self, ev):
         dpid = ev.msg.datapath.id
         if dpid in self.routers:
-            self.routers[dpid].packet_in(ev.msg) 
+            self.routers[dpid].packet_in(ev.msg)
 
-    def _register_router(dp):
+    def _register_router(self, dp):
         router = Router(dp, self.logger) 
         self.routers[dp.id] = router 
         self.logger.info('Router %d comes up.', dp.id)
 
-    def _unregister_router(dp):
+    def _unregister_router(self, dp):
         if dp.id in self.routers:
             self.routers[dp.id].delete()
             del self.routers[dp.id]
@@ -223,7 +226,7 @@ class Router():
         self.dp = dp
         self.logger = logger 
         self.ports = Ports(dp.ports)
-        self.ofctl = Ofctl(dp, logger)
+        self.ofctl = OfCtl(dp, logger)
         self.packet_buffer = SuspendPacketList(self.send_icmp_unreach_error)
         self.routing_tbl = RoutingTable(self.logger)
         
@@ -231,14 +234,14 @@ class Router():
         nw, mask, ip = nw_addr_aton(ip_str) 
         # Check overlaps
         mask_b = mask_ntob(mask)
-        for port in ports.values():
+        for port in self.ports.values():
             port_mask = mask_ntob(port.netmask)
             if (port.nw == ipv4_apply_mask(ip, port.netmask) 
                 or nw == ipv4_apply_mask(port.ip, mask)):
                 return None
-        if port_no in self.keys():
+        if port_no in self.ports.keys():
             return None
-        self[port_no].set_ip(nw, mask, ip)
+        self.ports[port_no].set_ip(nw, mask, ip)
 
         priority = get_priority(PRIORITY_MAC_LEARNING)
         self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
@@ -265,7 +268,7 @@ class Router():
         for send_port in ports:
             if in_port is None or in_port != send_port.port_no:
                 src_mac = send_port.mac
-                dst_amc = mac_lib.BROADCAST_STR
+                dst_mac = mac_lib.BROADCAST_STR
                 arp_target_mac = mac_lib.DONTCARE_STR
                 inport = self.ofctl.dp.ofproto.OFPP_CONTROLLER
                 output = send_port.port_no
@@ -291,6 +294,19 @@ class Router():
 
     def get_ips(self):
         return [port.ip for port in self.ports]
+
+    def send_icmp_unreach_error(self, packet_buffer):
+        # Send ICMP host unreach error.
+        src_ip = self._get_send_port_ip(packet_buffer.header_list)
+        if src_ip is not None:
+            self.ofctl.send_icmp(packet_buffer.in_port,
+                                 packet_buffer.header_list,
+                                 icmp.ICMP_DEST_UNREACH,
+                                 icmp.ICMP_HOST_UNREACH_CODE,
+                                 msg_data=packet_buffer.data,
+                                 src_ip=src_ip)
+
+            dstip = ip_addr_ntoa(packet_buffer.dst_ip)
 
     def set_routing_data(self, destination, outmac, gateway_mac, gateway_ip,
                          output):
@@ -322,8 +338,8 @@ class Router():
         cookie = 0
         self.ofctl.set_sw_config_for_ttl()
         # ARP
-        priority = get_priority(PRIORITY_ARP_HANDLING) 
-        ofctl.set_packetin_flow(cookie, priority, dl_type=ether.ETH_TYPE_ARP)
+        priority = get_priority(PRIORITY_ARP_HANDLING)
+        self.ofctl.set_packetin_flow(cookie, priority, dl_type=ether.ETH_TYPE_ARP)
         # Drop by default 
         priority = get_priority(PRIORITY_DEFAULT_ROUTING)
         outport = None
@@ -344,7 +360,7 @@ class Router():
             output = self.ofctl.dp.ofproto.OFPP_NORMAL
             self.ofctl.send_packet_out(in_port, output, msg.data)
         elif dst_ip not in rt_ips:
-            dst_port = self.ports.get_port(dst_ip)
+            dst_port = self.ports.get_by_ip(dst_ip)
             if (dst_port is not None
                 and src_port.ip == dst_port.ip):
                 output = self.ofctl.dp.ofproto.OFPP_NORMAL
@@ -394,7 +410,7 @@ class Router():
         if port is not None:
             src_ip = port.ip
         else:
-            route = self.routing_tbl.get_data(ip=dst_ip)
+            route = self.routing_tbl.get_data(dst_ip=dst_ip)
             if route is not None:
                 self.logger.info('Receive IP packet from %s to %s.', src_ip,
                                  dst_ip)
@@ -429,6 +445,7 @@ class Router():
                 src_ip = headers[ARP].src_ip
         except KeyError:
             self.logger.info('Receive unsupported packet.')
+            return
 
         port = self.ports.get_by_ip(src_ip)
         if port is not None:
@@ -462,9 +479,9 @@ class RoutingTable(dict):
                              overlap_route)
             return
 
-        routing_data = Route(self.route_id, dst_ip, netmask, gateway_ip,
+        routing_data = Route(self.route_id, dst, netmask, gateway_ip,
                              gateway_mac)
-        ip_str = ip_addr_ntoa(dst_ip)
+        ip_str = ip_addr_ntoa(dst)
         key = '%s/%d' % (ip_str, netmask)
         self[key] = routing_data
         self.route_id += 1
@@ -488,7 +505,7 @@ class RoutingTable(dict):
         elif dst_ip is not None:
             get_route = None
             mask = 0
-            for route in selg.values():
+            for route in self.values():
                 if ipv4_apply_mask(dst_ip, route.netmask) == route.dst_ip:
                     if mask < route.netmask:
                         get_route = route
@@ -507,7 +524,7 @@ class Route(object):
 class Ports(dict):
     def __init__(self, ports):
         super(Ports, self).__init__()
-        for port in self.ports.values():
+        for port in ports.values():
             self[port.port_no] = Port(port.port_no, port.hw_addr)
 
     def get_by_ip(self, ip):
@@ -520,9 +537,10 @@ class Ports(dict):
     def get_by_mac(self, mac):
         for port in self.values():
             if port.mac == mac:
-                return port 
+                return port
 
-class Port:
+
+class Port(object):
     def __init__(self, port_no, mac):
         super(Port, self).__init__()
         self.port_no = port_no
@@ -580,12 +598,23 @@ class SuspendPacket(object):
         self.wait_thread = hub.spawn(timer, self)
 
 
-
-class OfCtl():
+class OfCtl(object):
     def __init__(self, dp, logger):
         super(OfCtl, self).__init__()
         self.dp = dp
         self.logger = logger
+
+    def send_packet_out(self, in_port, output, data, data_str=None):
+        actions = [self.dp.ofproto_parser.OFPActionOutput(output, 0)]
+        self.dp.send_packet_out(buffer_id=UINT32_MAX, in_port=in_port,
+                                actions=actions, data=data)
+        # TODO: Packet library convert to string
+        # if data_str is None:
+        # data_str = str(packet.Packet(data))
+        # self.logger.debug('Packet out = %s', data_str, extra=self.sw_id)
+
+    def get_packetin_inport(self, msg):
+        return msg.in_port
 
     def set_routing_flow(self, cookie, priority, outport, dl_vlan=0,
                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
@@ -681,20 +710,12 @@ class OfCtl():
                       nw_proto=nw_proto, actions=actions)
 
     def send_icmp(self, in_port, protocol_list, icmp_type, icmp_code,
-                  icmp_data=None, msg_data=None, src_ip=None, vlan_id=None):
+                  icmp_data=None, msg_data=None, src_ip=None):
         # Generate ICMP reply packet
         csum = 0
         offset = ethernet.ethernet._MIN_LEN
 
-        if vlan_id != None:
-            ether_proto = ether.ETH_TYPE_8021Q
-            pcp = 0
-            cfi = 0
-            vlan_ether = ether.ETH_TYPE_IP
-            v = vlan.vlan(pcp, cfi, vlan_id, vlan_ether)
-            offset += vlan.vlan._MIN_LEN
-        else:
-            ether_proto = ether.ETH_TYPE_IP
+        ether_proto = ether.ETH_TYPE_IP
 
         eth = protocol_list[ETHERNET]
         e = ethernet.ethernet(eth.src, eth.dst, ether_proto)
@@ -725,8 +746,6 @@ class OfCtl():
 
         pkt = packet.Packet()
         pkt.add_protocol(e)
-        if vlan_id != None:
-            pkt.add_protocol(v)
         pkt.add_protocol(i)
         pkt.add_protocol(ic)
         pkt.serialize()
@@ -735,17 +754,11 @@ class OfCtl():
         self.send_packet_out(in_port, self.dp.ofproto.OFPP_IN_PORT,
                              pkt.data, data_str=str(pkt))
 
-    def send_arp(self, arp_opcode, vlan_id, src_mac, dst_mac,
+    def send_arp(self, arp_opcode, src_mac, dst_mac,
                  src_ip, dst_ip, arp_target_mac, in_port, output):
         # Generate ARP packet
-        if vlan_id != None:
-            ether_proto = ether.ETH_TYPE_8021Q
-            pcp = 0
-            cfi = 0
-            vlan_ether = ether.ETH_TYPE_ARP
-            v = vlan.vlan(pcp, cfi, vlan_id, vlan_ether)
-        else:
-            ether_proto = ether.ETH_TYPE_ARP
+
+        ether_proto = ether.ETH_TYPE_ARP
         hwtype = 1
         arp_proto = ether.ETH_TYPE_IP
         hlen = 6
@@ -756,27 +769,11 @@ class OfCtl():
         a = arp.arp(hwtype, arp_proto, hlen, plen, arp_opcode,
                     src_mac, src_ip, arp_target_mac, dst_ip)
         pkt.add_protocol(e)
-        if vlan_id != None:
-            pkt.add_protocol(v)
         pkt.add_protocol(a)
         pkt.serialize()
 
         # Send packet out
         self.send_packet_out(in_port, output, pkt.data, data_str=str(pkt))
-
-    def send_icmp_unreach_error(self, packet_buffer):
-        # Send ICMP host unreach error.
-        src_ip = self._get_send_port_ip(packet_buffer.header_list)
-        if src_ip is not None:
-            self.ofctl.send_icmp(packet_buffer.in_port,
-                                 packet_buffer.header_list,
-                                 self.vlan_id,
-                                 icmp.ICMP_DEST_UNREACH,
-                                 icmp.ICMP_HOST_UNREACH_CODE,
-                                 msg_data=packet_buffer.data,
-                                 src_ip=src_ip)
-
-            dstip = ip_addr_ntoa(packet_buffer.dst_ip)
 
 
 
@@ -852,8 +849,6 @@ def mask_ntob(mask, err_msg=None):
 
 
 def ipv4_apply_mask(address, prefix_len, err_msg=None):
-    import itertools
-
     assert isinstance(address, str)
     address_int = ipv4_text_to_int(address)
     return ipv4_int_to_text(address_int & mask_ntob(prefix_len, err_msg))
@@ -891,12 +886,10 @@ def nw_addr_aton(nw_addr, err_msg=None):
     return nw_addr, netmask, default_route
 
 ETHERNET = ethernet.ethernet.__name__
-VLAN = vlan.vlan.__name__
 IPV4 = ipv4.ipv4.__name__
 ARP = arp.arp.__name__
 ICMP = icmp.icmp.__name__
 TCP = tcp.tcp.__name__
 UDP = udp.udp.__name__
-
 
 
