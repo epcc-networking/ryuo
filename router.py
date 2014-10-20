@@ -157,6 +157,8 @@ class Router():
         self.logger = logger 
         self.ports = Ports(dp.ports)
         self.ofctl = Ofctl(dp, logger)
+        self.packet_buffer = SuspendPacketList(self.send_icmp_unreach_error)
+        self.routing_tbl = RoutingTable(self.logger)
         
     def set_ip(self, port_no, ip_str):
         nw, mask, ip = nw_addr_aton(ip_str) 
@@ -244,13 +246,46 @@ class Router():
                         self.ofctl.send_packet_out(suspend_packet.in_port,
                                                    output,
                                                    suspend_packet.data)
-        return 
 
     def _packet_in_invalid_ttl(self, msg, headers):
-        return 
+        srcip = ip_addr_ntoa(headers[IPV4].src)
+        self.logger.info('Receive invalid ttl packet from %s', srcip)
+
+        in_port = self.ofctl.get_packetin_inport(msg)
+        src_ip = self._get_send_port_ip(headers)
+        if src_ip is not None:
+            self.ofctl.send_icmp(in_port, headers, icmp.ICMP_TIME_EXCEEDED,
+                                 icmp.ICMP_TTL_EXPIRED_CODE,
+                                msg_data=msg.data, src_ip=src_ip)
+            self.logger('Send ICMP time exceeded to %s', src_ip)
 
     def _packet_in_to_node(self, msg, headers):
-        return 
+        if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
+            self.logger.info('Suspend pakcet drop')
+            return
+        in_port = self.ofctl.get_packetin_inport(msg)
+        src_ip = headers[IPV4].src
+        dst_ip = headers[IPV4].dst
+        srcip = ip_addr_ntoa(src_ip)
+        dstip = ip_addr_ntoa(dst_ip) 
+        port = self.ports.get_by_ip(dst_ip)
+        if port is not None:
+            src_ip = port.ip
+        else:
+            route = self.routing_tbl.get_data(ip=dst_ip)
+            if route is not None:
+                self.logger.info('Receive IP packet from %s to %s.', src_ip,
+                                 dst_ip)
+                gateway = self.ports.get_by_ip(route.gateway_ip)
+                if gateway is not None:
+                    src_ip = gateway.ip
+                    dst_ip = route.gateway_ip
+                    self.logger.info('Gateway added: %s, route: %s', src_ip,
+                                     dst_ip)
+        if src_ip is not None:
+            self.packet_buffer.add(in_port, headers, msg.data)
+            self.send_arp_request(src_ip, dst_ip, in_port=in_port)
+            self.logger.info('Send ARP request')
 
     def _packet_in_icmp_req(self, msg, headers):
         in_port = self.ofctl.get_packetin_inport(msg)
@@ -262,6 +297,90 @@ class Router():
         in_port = self.ofctl.get_packetin_inport(msg)
         self.ofctl.send_icmp(in_port, headers, icmp.ICMP_DEST_UNREACH,
                              icmp.ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
+
+    def _get_send_port_ip(self, headers):
+        try:
+            src_mac = headers[ETHERNET].src
+            if IPV4 in headers:
+                src_ip = headers[IPV4].src
+            else:
+                src_ip = headers[ARP].src_ip
+        except KeyError:
+            self.logger.info('Receive unsupported packet.')
+
+        port = self.ports.get_by_ip(src_ip)
+        if port is not None:
+            return port.ip
+        else:
+            route = self.routing_tbl.get_data(gw_mac=src_mac)
+            if route is not None:
+                port = self.ports.get_by_ip(route.gateway_ip)
+                if port is not None:
+                    return port.ip
+
+        self.logger.info('Receive packet from unknown IP %s',
+                         ip_addr_ntoa(src_ip))
+
+class RoutingTable(dict):
+    def __init__(self, logger):
+        super(RoutingTable, self).__init__()
+        self.logger = logger 
+        self.route_id = 1
+
+    def add(self, dst_nw_addr, gateway_ip, gateway_mac):
+        dst, netmask, dummy = nw_addr_aton(dst_nw_addr)
+        gateway_ip = ip_addr_aton(gateway_ip)
+
+        overlap_route = None
+        if dst_nw_addr in self:
+            overlap_route = self[dst_nw_addr].route_id
+
+        if overlap_route is not None:
+            self.logger.info('Destination overlaps route id: %d',
+                             overlap_route)
+            return
+
+        routing_data = Route(self.route_id, dst_ip, netmask, gateway_ip,
+                             gateway_mac)
+        ip_str = ip_addr_ntoa(dst_ip)
+        key = '%s/%d' % (ip_str, netmask)
+        self[key] = routing_data
+        self.route_id += 1
+
+        return routing_data
+
+    def delete(self, route_id):
+        for key, value in self.items():
+            if value.route_id == route_id:
+                del self[key]
+
+    def get_gateways(self):
+        return [routing_data.gateway_ip for routing_data in self.values()]
+
+    def get_data(self, gw_mac=None, dst_ip=None):
+        if gw_mac is not None:
+            for route in self.values():
+                if gw_mac == route.gateway_mac:
+                    return route
+            return None
+        elif dst_ip is not None:
+            get_route = None
+            mask = 0
+            for route in selg.values():
+                if ipv4_apply_mask(dst_ip, route.netmask) == route.dst_ip:
+                    if mask < route.netmask:
+                        get_route = route
+                        mask = route.netmask
+            return get_route 
+
+class Route(object):
+    def __init__(self, route_id, dst_ip, netmask, gateway_ip, gateway_mac):
+        super(Route, self).__init__()
+        self.route_id = route_id
+        self.dst_ip = dst_ip
+        self.netmask = netmask
+        self.gateway_ip = gateway_ip
+        self.gateway_mac = gateway_mac 
 
 class Ports(dict):
     def __init__(self, ports):
@@ -294,6 +413,50 @@ class Port:
         self.nw = nw
         self.mask = mask
         self.ip = ip
+
+
+class SuspendPacketList(list):
+    def __init__(self, timeout_function):
+        super(SuspendPacketList, self).__init__()
+        self.timeout_function = timeout_function
+
+    def add(self, in_port, header_list, data):
+        suspend_pkt = SuspendPacket(in_port, header_list, data,
+                                    self.wait_arp_reply_timer)
+        self.append(suspend_pkt)
+
+    def delete(self, pkt=None, del_addr=None):
+        if pkt is not None:
+            del_list = [pkt]
+        else:
+            assert del_addr is not None
+            del_list = [pkt for pkt in self if pkt.dst_ip in del_addr]
+
+        for pkt in del_list:
+            self.remove(pkt)
+            hub.kill(pkt.wait_thread)
+            pkt.wait_thread.wait()
+
+    def get_data(self, dst_ip):
+        return [pkt for pkt in self if pkt.dst_ip == dst_ip]
+
+    def wait_arp_reply_timer(self, suspend_pkt):
+        hub.sleep(ARP_REPLY_TIMER)
+        if suspend_pkt in self:
+            self.timeout_function(suspend_pkt)
+            self.delete(pkt=suspend_pkt)
+
+
+class SuspendPacket(object):
+    def __init__(self, in_port, header_list, data, timer):
+        super(SuspendPacket, self).__init__()
+        self.in_port = in_port
+        self.dst_ip = header_list[IPV4].dst
+        self.header_list = header_list
+        self.data = data
+        # Start ARP reply wait timer.
+        self.wait_thread = hub.spawn(timer, self)
+
 
 
 class OfCtl():
