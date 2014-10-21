@@ -20,7 +20,7 @@ from utils import nw_addr_aton, mask_ntob, ipv4_apply_mask, ip_addr_ntoa
 class Router():
     def __init__(self, dp, routing):
         self.dp = dp
-        self._logger = logging.getLogger(__name__)
+        self._init_logger()
         self._routing = routing
         self.ports = Ports(dp.ports)
         self.ofctl = OfCtl(dp, self._logger)
@@ -136,6 +136,14 @@ class Router():
                                     dec_ttl=True)
         self._logger.info('Set flow to %s via %s', route.dst_ip,
                           route.gateway_ip)
+
+    def _init_logger(self):
+        self._logger = logging.getLogger('%s %d' % (__name__, self.dp.id))
+        formatter = logging.Formatter('[%(name)s][%(levelname)s]: %(message)s')
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        self._logger.addHandler(handler)
+        self._logger.propagate = False
 
     def _init_flows(self):
         cookie = 0

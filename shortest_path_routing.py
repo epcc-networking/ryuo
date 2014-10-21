@@ -100,7 +100,6 @@ class ShortestPathRouting(Routing):
         src_ip = headers[ARP].src_ip
 
         gateway_flg = False
-        self._logger.info("dpid----> %d", router.dp.id)
         for key, value in self._routing_tables[router.dp.id].items():
             if value.gateway_ip == src_ip:
                 gateway_flg = True

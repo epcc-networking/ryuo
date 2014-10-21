@@ -1,12 +1,14 @@
 import logging
 
-from utils import ipv4_apply_mask, nw_addr_aton, ip_addr_aton, ip_addr_ntoa
+from utils import ipv4_apply_mask, nw_addr_aton, ip_addr_aton, ip_addr_ntoa, \
+    config_logger
 
 
 class Routing(object):
     def __init__(self):
         super(Routing, self).__init__()
         self._logger = logging.getLogger(type(self).__name__)
+        config_logger(self._logger)
 
     def routing(self, links, switches, routers):
         raise NotImplementedError()

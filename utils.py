@@ -1,3 +1,4 @@
+import logging
 import socket
 import struct
 
@@ -5,6 +6,13 @@ from ryu.lib import addrconv
 
 from constants import UINT32_MAX
 
+
+def config_logger(logger):
+    formatter = logging.Formatter('[%(name)s][%(levelname)s]: %(message)s')
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = False
 
 def mask_ntob(mask, err_msg=None):
     try:

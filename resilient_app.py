@@ -1,3 +1,5 @@
+import logging
+
 from ryu.base import app_manager
 from ryu.app.wsgi import WSGIApplication
 from ryu.controller import dpset
@@ -11,6 +13,7 @@ from ryu.topology.api import get_all_link
 from rest_controller import RestController
 from router import Router
 from shortest_path_routing import ShortestPathRouting
+from utils import config_logger
 
 
 class ResilientApp(app_manager.RyuApp):
@@ -21,6 +24,8 @@ class ResilientApp(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(ResilientApp, self).__init__(*args, **kwargs)
+        self._logger = logging.getLogger(__name__)
+        config_logger(self._logger)
         wsgi = kwargs['wsgi']
         wsgi.register(RestController, {'router_app': self})
         self._routing = ShortestPathRouting()
@@ -71,10 +76,10 @@ class ResilientApp(app_manager.RyuApp):
         router = Router(dp, self._routing)
         self._routing.register_router(router)
         self.routers[dp.id] = router
-        self.logger.info('Router %d comes up.', dp.id)
+        self._logger.info('Router %d comes up.', dp.id)
 
     def _unregister_router(self, dp):
         if dp.id in self.routers:
             self.routers[dp.id].delete()
             del self.routers[dp.id]
-            self.logger.info('Router %d leaves.', dp.id)
+            self._logger.info('Router %d leaves.', dp.id)

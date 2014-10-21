@@ -81,7 +81,6 @@ class OfCtl(object):
             self.dp, [packet_in_mask, 0], [port_status_mask, 0],
             [flow_removed_mask, 0])
         self.dp.send_msg(m)
-        self.logger.info('Set SW config for TTL error packet in.')
 
     def set_flow(self, cookie, priority, dl_type=0, dl_dst=0, dl_vlan=0,
                  nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
