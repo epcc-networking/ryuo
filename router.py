@@ -116,16 +116,15 @@ class Router():
             self._logger.info('Send ICMP unreachable to %s',
                               packet_buffer.dst_ip)
 
-    def install_routing_entry(self, route, src_mac, gateway_mac, out_port,
-                              in_port=None):
+    def install_routing_entry(self, route):
         priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)
-        self.ofctl.set_routing_flow(0, priority, out_port,
-                                    src_mac=src_mac,
-                                    dst_mac=gateway_mac,
+        self.ofctl.set_routing_flow(0, priority, route.out_port,
+                                    src_mac=route.src_mac,
+                                    dst_mac=route.gateway_mac,
                                     nw_dst=route.dst_ip,
                                     dst_mask=route.netmask,
                                     dec_ttl=True,
-                                    in_port=in_port)
+                                    in_port=route.in_port)
 
     def _install_routing_entry(self, route, output, src_mac, dst_mac):
         priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)

@@ -1,7 +1,6 @@
 from constants import ARP
 
-from routing import Routing, BaseRoute
-from utils import nw_addr_aton, ip_addr_aton, ip_addr_ntoa, ipv4_apply_mask
+from routing import Routing, BaseRoutingTable
 
 
 class ShortestPathRouting(Routing):
@@ -10,7 +9,7 @@ class ShortestPathRouting(Routing):
         self._routing_tables = {}
 
     def register_router(self, router):
-        self._routing_tables[router.dp.id] = _RoutingTable(self._logger)
+        self._routing_tables[router.dp.id] = BaseRoutingTable(self._logger)
 
     def routing(self, links, switches, routers):
         dpids = [switch.ports[0].dpid for switch in switches]
@@ -84,14 +83,10 @@ class ShortestPathRouting(Routing):
                 for src_dpid in dpids}
 
     def get_routing_data_by_dst_ip(self, dpid, dst_ip):
-        for route in self._routing_tables[dpid].values():
-            if dst_ip == route.dst_ip:
-                return route
+        return self._routing_tables[dpid].get_data_by_dst_ip(dst_ip)
 
     def get_routing_data_by_gateway_mac(self, dpid, gateway_mac):
-        for route in self._routing_tables[dpid].values():
-            if gateway_mac == route.gateway_mac:
-                return route
+        return self._routing_tables[dpid].get_data_by_gateway_mac(gateway_mac)
 
     def get_gateways(self, dpid):
         return [route.gateway_ip for route in
@@ -129,56 +124,4 @@ class ShortestPathRouting(Routing):
         return gateway_flg
 
 
-class _RoutingTable(dict):
-    def __init__(self, logger):
-        super(_RoutingTable, self).__init__()
-        self.logger = logger
-        self.route_id = 1
 
-    def add(self, router, dst_ip, gateway_ip, src_mac, gateway_mac, out_port):
-        dst, netmask, dummy = nw_addr_aton(dst_ip)
-        gateway_ip = ip_addr_aton(gateway_ip)
-
-        overlap_route = None
-        if dst_ip in self:
-            overlap_route = self[dst_ip].route_id
-
-        if overlap_route is not None:
-            self.logger.info('Destination overlaps route id: %d',
-                             overlap_route)
-            return
-
-        routing_data = BaseRoute(self.route_id, dst, netmask, gateway_ip,
-                                 src_mac, gateway_mac, out_port)
-        ip_str = ip_addr_ntoa(dst)
-        key = '%s/%d' % (ip_str, netmask)
-        self[key] = routing_data
-        self.route_id += 1
-
-        router.install_routing_entry(routing_data, src_mac, gateway_mac,
-                                     out_port, in_port=None)
-        return routing_data
-
-    def delete(self, route_id):
-        for key, value in self.items():
-            if value.route_id == route_id:
-                del self[key]
-
-    def get_gateways(self):
-        return [routing_data.gateway_ip for routing_data in self.values()]
-
-    def get_data(self, gw_mac=None, dst_ip=None):
-        if gw_mac is not None:
-            for route in self.values():
-                if gw_mac == route.gateway_mac:
-                    return route
-            return None
-        elif dst_ip is not None:
-            get_route = None
-            mask = 0
-            for route in self.values():
-                if ipv4_apply_mask(dst_ip, route.netmask) == route.dst_ip:
-                    if mask < route.netmask:
-                        get_route = route
-                        mask = route.netmask
-            return get_route
