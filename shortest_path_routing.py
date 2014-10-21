@@ -1,6 +1,6 @@
 import logging
 
-from routing import Routing
+from routing import Routing, BaseRoute
 from utils import nw_addr_aton, ip_addr_aton, ip_addr_ntoa, ipv4_apply_mask
 
 
@@ -8,10 +8,21 @@ class ShortestPathRouting(Routing):
     def __init__(self):
         super(ShortestPathRouting, self).__init__()
         self._logger = logging.getLogger(__name__)
+        self._routing_tables = {}
 
     def routing(self, links, switches, routers):
         dpids = [switch.ports[0].dpid for switch in switches]
-        self._logger.info(str(dpids))
+        self._logger.info('Connected routers: %s', str(dpids))
+        for router_id, router in routers.items():
+            self._logger.info('Router %d', router_id)
+            self._logger.info('Ports %s', str(router.ports.keys()))
+            for port in router.ports.values():
+                if port.ip is None:
+                    continue
+                self._logger.info("ip %s, nw %s, mask %d", port.ip, port.nw,
+                                  port.netmask)
+        self._routing_tables = {dpid: _RoutingTable(self._logger) for dpid in
+                                dpids}
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                  for src_dpid in dpids}
         via = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
@@ -25,7 +36,6 @@ class ShortestPathRouting(Routing):
             via[src_dpid][dst_dpid] = link
             tmp_graph[src_dpid][dst_dpid] = 1
 
-        self._logger.info(str(graph))
         # Shortest path for each node
         for k in dpids:
             for src in dpids:
@@ -42,14 +52,7 @@ class ShortestPathRouting(Routing):
                             via[src][dst] = graph[src][k]
                         else:
                             via[src][dst] = via[src][k]
-        for router_id, router in routers.items():
-            self._logger.info('Router %d', router_id)
-            self._logger.info('Ports %s', str(router.ports.keys()))
-            for port in router.ports.values():
-                if port.ip is None:
-                    continue
-                self._logger.info("ip %s, nw %s, mask %d", port.ip, port.nw,
-                                  port.netmask)
+
         # Routing entries
         for src in dpids:
             router = routers[src]
@@ -64,17 +67,18 @@ class ShortestPathRouting(Routing):
                 for port in ports.values():
                     if port.ip is None:
                         continue
-                    addr = port.nw
                     gateway_ip = (routers[out_link.dst.dpid]
                                   .ports[out_link.dst.port_no]
                                   .ip)
                     dst_str = '%s/%d' % (port.ip, port.netmask)
                     self._logger.info("%s via %s", port.ip, gateway_ip)
-                    router.set_routing_data(dst_str,
-                                            out_link.src.hw_addr,
-                                            out_link.dst.hw_addr,
-                                            gateway_ip,
-                                            out_link.src.port_no)
+                    self._routing_tables[src].add(router,
+                                                  dst_str,
+                                                  out_link.src.hw_addr,
+                                                  out_link.dst.hw_addr,
+                                                  gateway_ip,
+                                                  out_link.src.port_no,
+                                                  router)
 
 
 class _RoutingTable(dict):
@@ -83,26 +87,28 @@ class _RoutingTable(dict):
         self.logger = logger
         self.route_id = 1
 
-    def add(self, dst_nw_addr, gateway_ip, gateway_mac):
-        dst, netmask, dummy = nw_addr_aton(dst_nw_addr)
+    def add(self, router, dst_ip, gateway_ip, src_mac, gateway_mac, out_port):
+        dst, net_mask, dummy = nw_addr_aton(dst_ip)
         gateway_ip = ip_addr_aton(gateway_ip)
 
         overlap_route = None
-        if dst_nw_addr in self:
-            overlap_route = self[dst_nw_addr].route_id
+        if dst_ip in self:
+            overlap_route = self[dst_ip].route_id
 
         if overlap_route is not None:
             self.logger.info('Destination overlaps route id: %d',
                              overlap_route)
             return
 
-        routing_data = _Route(self.route_id, dst, netmask, gateway_ip,
-                              gateway_mac)
+        routing_data = BaseRoute(self.route_id, dst, net_mask, gateway_ip,
+                                 src_mac, gateway_mac, out_port)
         ip_str = ip_addr_ntoa(dst)
-        key = '%s/%d' % (ip_str, netmask)
+        key = '%s/%d' % (ip_str, net_mask)
         self[key] = routing_data
         self.route_id += 1
 
+        router.install_routing_entry(routing_data, src_mac, gateway_mac,
+                                     out_port, in_port=None)
         return routing_data
 
     def delete(self, route_id):
@@ -129,12 +135,3 @@ class _RoutingTable(dict):
                         mask = route.netmask
             return get_route
 
-
-class _Route(object):
-    def __init__(self, route_id, dst_ip, netmask, gateway_ip, gateway_mac):
-        super(_Route, self).__init__()
-        self.route_id = route_id
-        self.dst_ip = dst_ip
-        self.netmask = netmask
-        self.gateway_ip = gateway_ip
-        self.gateway_mac = gateway_mac

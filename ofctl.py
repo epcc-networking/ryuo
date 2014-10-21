@@ -37,11 +37,10 @@ class OfCtl(object):
                 break
         return in_port
 
-    def set_routing_flow(self, cookie, priority, outport, dl_vlan=0,
+    def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
-                         dl_type=ether.ETH_TYPE_IP):
-        ofp = self.dp.ofproto
+                         dl_type=ether.ETH_TYPE_IP, in_port=None):
         ofp_parser = self.dp.ofproto_parser
 
         actions = []
@@ -51,13 +50,14 @@ class OfCtl(object):
             actions.append(ofp_parser.OFPActionSetField(eth_src=src_mac))
         if dst_mac:
             actions.append(ofp_parser.OFPActionSetField(eth_dst=dst_mac))
-        if outport is not None:
-            actions.append(ofp_parser.OFPActionOutput(outport, 0))
+        if out_port is not None:
+            actions.append(ofp_parser.OFPActionOutput(out_port, 0))
 
         self.set_flow(cookie, priority, dl_type=dl_type, dl_vlan=dl_vlan,
                       nw_src=nw_src, src_mask=src_mask,
                       nw_dst=nw_dst, dst_mask=dst_mask,
-                      idle_timeout=idle_timeout, actions=actions)
+                      idle_timeout=idle_timeout, actions=actions,
+                      in_port=in_port)
 
     def set_routing_flow_v6(self, cookie, priority, outport, dl_vlan=0,
                             nw_src=0, src_mask=128, nw_dst=0, dst_mask=128,
@@ -85,7 +85,7 @@ class OfCtl(object):
 
     def set_flow(self, cookie, priority, dl_type=0, dl_dst=0, dl_vlan=0,
                  nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
-                 nw_proto=0, idle_timeout=0, actions=None):
+                 nw_proto=0, idle_timeout=0, actions=None, in_port=None):
         ofp = self.dp.ofproto
         ofp_parser = self.dp.ofproto_parser
         cmd = ofp.OFPFC_ADD
@@ -98,6 +98,8 @@ class OfCtl(object):
             match.set_dl_dst(dl_dst)
         if dl_vlan:
             match.set_vlan_vid(dl_vlan)
+        if in_port:
+            match.set_in_port(in_port)
         # TODO: Handle ipv6 address
         if nw_src:
             match.set_ipv4_src_masked(ipv4_text_to_int(nw_src),

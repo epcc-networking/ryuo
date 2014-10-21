@@ -1,27 +1,12 @@
-import json
-
 from ryu.lib.packet.arp import arp
-from ryu.lib.packet.icmp import icmp
 
-from webob import Response
-from ryu.base import app_manager
-from ryu.app.wsgi import route as rest_route
-from ryu.app.wsgi import ControllerBase
-from ryu.app.wsgi import WSGIApplication
-from ryu.controller import dpset
-from ryu.controller import ofp_event
-from ryu.controller.handler import set_ev_cls
-from ryu.controller.handler import MAIN_DISPATCHER
+from ryu.lib.packet.icmp import icmp
 from ryu.lib import hub
 from ryu.lib import mac  as mac_lib
 from ryu.lib.packet import packet
 from ryu.ofproto import ether
-from ryu.ofproto import ofproto_v1_3
-from ryu.topology.api import get_all_switch
-from ryu.topology.api import get_all_link
 
-from constants import ROUTER_ID_PATTERN, PORTNO_PATTERN, \
-    PRIORITY_MAC_LEARNING, \
+from constants import PRIORITY_MAC_LEARNING, \
     PRIORITY_IP_HANDLING, PRIORITY_L2_SWITCHING, ARP, IPV4, ICMP, TCP, UDP, \
     PRIORITY_TYPE_ROUTE, PRIORITY_ARP_HANDLING, PRIORITY_DEFAULT_ROUTING, \
     PRIORITY_NORMAL, MAX_SUSPENDPACKETS, PRIORITY_IMPLICIT_ROUTING, \
@@ -30,197 +15,6 @@ from constants import ROUTER_ID_PATTERN, PORTNO_PATTERN, \
 from ofctl import OfCtl
 from utils import nw_addr_aton, mask_ntob, ipv4_apply_mask, ip_addr_ntoa, \
     ip_addr_aton
-
-
-class RouterRestController(ControllerBase):
-    def __init__(self, req, link, data, **config):
-        super(RouterRestController, self).__init__(req, link, data, **config)
-        self.router_app = data['router_app']
-
-    @rest_route('topo', '/topo/links', methods=['GET'])
-    def get_links(self, req, **kwargs):
-        links = self.router_app.get_all_links()
-        return JsonResponse([link.to_dict() for link in links])
-
-    @rest_route('topo', '/topo/switches', methods=['GET'])
-    def get_switches(self, req, **kwargs):
-        switches = self.router_app.get_all_switches()
-        return JsonResponse([switch.to_dict() for switch in switches])
-
-    @rest_route('route', '/router/{router_id}', methods=['GET'],
-                requirements={'router_id': ROUTER_ID_PATTERN})
-    def get_router(self, req, **kwargs):
-        router = self.router_app.get_router(int(kwargs['router_id']))
-        if router is None:
-            return ErrorResponse(404, 'Router not found')
-        return JsonResponse(router)
-
-    @rest_route('router', '/router/{router_id}/{port_no}', methods=['GET'],
-                requirements={'router_id': ROUTER_ID_PATTERN,
-                              'port_no': PORTNO_PATTERN})
-    def get_port(self, req, **kwargs):
-        return JsonResponse(self.router_app.get_port(int(kwargs['router_id']),
-                                                     int(kwargs['port_no'])))
-
-    @rest_route('router', '/router/{router_id}/{port_no}/address',
-                methods=['POST'],
-                requirements={'router_id': ROUTER_ID_PATTERN,
-                              'port_no': PORTNO_PATTERN})
-    def set_port_address(self, req, router_id, port_no, **kwargs):
-        address = eval(req.body).get('address')
-        self.router_app.logger.info("%s %s %s", router_id, port_no, address)
-        if address is None:
-            return ErrorResponse(400, 'Empty address.')
-        return JsonResponse(self.router_app.set_port_address(address,
-                                                             int(router_id),
-                                                             int(port_no)))
-
-    @rest_route('router', '/router/{router_id}/{port_no}/address',
-                methods=['DELETE'],
-                requirements={'router_id': ROUTER_ID_PATTERN,
-                              'port_no': PORTNO_PATTERN})
-    def delete_port_address(self, req, **kwargs):
-        return JsonResponse(
-            self.router_app.delete_port_address(
-                int(kwargs['router_id']),
-                int(kwargs['port_no'])))
-
-    @rest_route('router', '/router/routing', methods=['POST'])
-    def routing(self, req, **kwargs):
-        return JsonResponse(self.router_app.routing())
-
-
-class RouterApp(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-
-    _CONTEXTS = {'dpset': dpset.DPSet,
-                 'wsgi': WSGIApplication}
-
-    def __init__(self, *args, **kwargs):
-        super(RouterApp, self).__init__(*args, **kwargs)
-        wsgi = kwargs['wsgi']
-        wsgi.register(RouterRestController, {'router_app': self})
-
-        self.routers = {}
-
-    def get_all_links(self):
-        return get_all_link(self)
-
-    def get_all_switches(self):
-        return get_all_switch(self)
-
-    def get_router(self, router_id):
-        return self.routers[router_id]
-
-    def get_port(self, router_id, port_no):
-        return None
-
-    def set_port_address(self, address, router_id, port_no):
-        router = self.get_router(router_id)
-        return router.set_port_address(address, port_no)
-
-    def del_port_address(self, router_id, port_no):
-        return None
-
-    def routing(self):
-        links = self.get_all_links()
-        switches = self.get_all_switches()
-
-        if links is None or switches is None:
-            return
-        dpids = [switch.ports[0].dpid for switch in switches]
-        self.logger.info(str(dpids))
-        graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
-                 for src_dpid in dpids}
-        via = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
-               for src_dpid in dpids}
-        tmp_graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
-                     for src_dpid in dpids}
-        for link in links:
-            dst_dpid = link.dst.dpid
-            src_dpid = link.src.dpid
-            graph[src_dpid][dst_dpid] = link
-            via[src_dpid][dst_dpid] = link
-            tmp_graph[src_dpid][dst_dpid] = 1
-
-        self.logger.info(str(graph))
-        # Shortest path for each node
-        for k in dpids:
-            for src in dpids:
-                for dst in dpids:
-                    if src == dst:
-                        continue
-                    src_k = tmp_graph[src][k]
-                    k_dst = tmp_graph[k][src]
-                    src_dst = tmp_graph[src][dst]
-                    if (src_k is not None and k_dst is not None and
-                            (src_dst is None or src_dst > src_k + k_dst)):
-                        tmp_graph[src][dst] = src_k + k_dst
-                        if graph[src][k] is not None:
-                            via[src][dst] = graph[src][k]
-                        else:
-                            via[src][dst] = via[src][k]
-        for router_id, router in self.routers.items():
-            self.logger.info('Router %d', router_id)
-            self.logger.info('Ports %s', str(router.ports.keys()))
-            for port in router.ports.values():
-                if port.ip is None:
-                    continue
-                self.logger.info("ip %s, nw %s, mask %d", port.ip, port.nw,
-                                 port.netmask)
-        # Routing entries
-        for src in dpids:
-            router = self.get_router(src)
-            for dst in dpids:
-                if src == dst:
-                    continue
-                ports = self.get_router(dst).ports
-                out_link = via[src][dst]
-                if out_link is None:
-                    continue
-                self.logger.info(out_link)
-                for port in ports.values():
-                    if port.ip is None:
-                        continue
-                    addr = port.nw
-                    gateway_ip = (self.get_router(out_link.dst.dpid)
-                                  .ports[out_link.dst.port_no]
-                                  .ip)
-                    dst_str = '%s/%d' % (port.ip, port.netmask)
-                    self.logger.info("%s via %s", port.ip, gateway_ip)
-                    router.set_routing_data(dst_str,
-                                            out_link.src.hw_addr,
-                                            out_link.dst.hw_addr,
-                                            gateway_ip,
-                                            out_link.src.port_no)
-        return {src_dpid: {dst_dpid: via[src_dpid][dst_dpid].to_dict()
-                           for dst_dpid in dpids
-                           if via[src_dpid][dst_dpid] is not None}
-                for src_dpid in dpids}
-
-    @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
-    def datapath_handler(self, ev):
-        if ev.enter:
-            self._register_router(ev.dp)
-        else:
-            self._unregister_router(ev.dp)
-
-    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def packet_in(self, ev):
-        dpid = ev.msg.datapath.id
-        if dpid in self.routers:
-            self.routers[dpid].packet_in(ev.msg)
-
-    def _register_router(self, dp):
-        router = Router(dp, self.logger)
-        self.routers[dp.id] = router
-        self.logger.info('Router %d comes up.', dp.id)
-
-    def _unregister_router(self, dp):
-        if dp.id in self.routers:
-            self.routers[dp.id].delete()
-            del self.routers[dp.id]
-            self.logger.info('Router %d leaves.', dp.id)
 
 
 class Router():
@@ -337,6 +131,17 @@ class Router():
                 return
             self._install_routing_entry(route, output, outmac, gateway_mac)
             return route.route_id
+
+    def install_routing_entry(self, route, src_mac, gateway_mac, out_port,
+                              in_port=None):
+        priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)
+        self.ofctl.set_routing_flow(0, priority, out_port,
+                                    src_mac=src_mac,
+                                    dst_mac=gateway_mac,
+                                    nw_dst=route.dst_ip,
+                                    dst_mask=route.net_mask,
+                                    dec_ttl=True,
+                                    in_port=in_port)
 
     def _install_routing_entry(self, route, output, src_mac, dst_mac):
         priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)
@@ -508,8 +313,8 @@ class Router():
                 # src_mac=dst_mac,
                 # dst_mac=src_mac,
                 # nw_dst=value.dst_ip,
-                #                            dst_mask=value.netmask,
-                #                            dec_ttl=True)
+                # dst_mask=value.netmask,
+                # dec_ttl=True)
                 #self.logger.info('Set %s flow [cookie=0x%x]', log_msg, cookie,
                 # extra=self.sw_id)
         return gateway_flg
@@ -677,15 +482,6 @@ class SuspendPacket(object):
         self.data = data
         # Start ARP reply wait timer.
         self.wait_thread = hub.spawn(timer, self)
-
-
-def JsonResponse(obj, status=200):
-    return Response(status=status, content_type='application/json',
-                    body=json.dumps(obj))
-
-
-def ErrorResponse(status, msg):
-    return JsonResponse(msg, status=status)
 
 
 def get_priority(priority_type, vid=0, route=None):
