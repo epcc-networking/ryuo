@@ -10,6 +10,7 @@ from ryu.topology.api import get_all_link
 
 from rest_controller import RestController
 from router import Router
+from shortest_path_routing import ShortestPathRouting
 
 
 class ResilientApp(app_manager.RyuApp):
@@ -22,6 +23,7 @@ class ResilientApp(app_manager.RyuApp):
         super(ResilientApp, self).__init__(*args, **kwargs)
         wsgi = kwargs['wsgi']
         wsgi.register(RestController, {'router_app': self})
+        self._routing = ShortestPathRouting()
 
         self.routers = {}
 
@@ -50,75 +52,7 @@ class ResilientApp(app_manager.RyuApp):
 
         if links is None or switches is None:
             return
-        dpids = [switch.ports[0].dpid for switch in switches]
-        self.logger.info(str(dpids))
-        graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
-                 for src_dpid in dpids}
-        via = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
-               for src_dpid in dpids}
-        tmp_graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
-                     for src_dpid in dpids}
-        for link in links:
-            dst_dpid = link.dst.dpid
-            src_dpid = link.src.dpid
-            graph[src_dpid][dst_dpid] = link
-            via[src_dpid][dst_dpid] = link
-            tmp_graph[src_dpid][dst_dpid] = 1
-
-        self.logger.info(str(graph))
-        # Shortest path for each node
-        for k in dpids:
-            for src in dpids:
-                for dst in dpids:
-                    if src == dst:
-                        continue
-                    src_k = tmp_graph[src][k]
-                    k_dst = tmp_graph[k][src]
-                    src_dst = tmp_graph[src][dst]
-                    if (src_k is not None and k_dst is not None and
-                            (src_dst is None or src_dst > src_k + k_dst)):
-                        tmp_graph[src][dst] = src_k + k_dst
-                        if graph[src][k] is not None:
-                            via[src][dst] = graph[src][k]
-                        else:
-                            via[src][dst] = via[src][k]
-        for router_id, router in self.routers.items():
-            self.logger.info('Router %d', router_id)
-            self.logger.info('Ports %s', str(router.ports.keys()))
-            for port in router.ports.values():
-                if port.ip is None:
-                    continue
-                self.logger.info("ip %s, nw %s, mask %d", port.ip, port.nw,
-                                 port.netmask)
-        # Routing entries
-        for src in dpids:
-            router = self.get_router(src)
-            for dst in dpids:
-                if src == dst:
-                    continue
-                ports = self.get_router(dst).ports
-                out_link = via[src][dst]
-                if out_link is None:
-                    continue
-                self.logger.info(out_link)
-                for port in ports.values():
-                    if port.ip is None:
-                        continue
-                    addr = port.nw
-                    gateway_ip = (self.get_router(out_link.dst.dpid)
-                                  .ports[out_link.dst.port_no]
-                                  .ip)
-                    dst_str = '%s/%d' % (port.ip, port.netmask)
-                    self.logger.info("%s via %s", port.ip, gateway_ip)
-                    router.set_routing_data(dst_str,
-                                            out_link.src.hw_addr,
-                                            out_link.dst.hw_addr,
-                                            gateway_ip,
-                                            out_link.src.port_no)
-        return {src_dpid: {dst_dpid: via[src_dpid][dst_dpid].to_dict()
-                           for dst_dpid in dpids
-                           if via[src_dpid][dst_dpid] is not None}
-                for src_dpid in dpids}
+        return self._routing.routing(links, switches, self.routers)
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def datapath_handler(self, ev):
@@ -134,7 +68,8 @@ class ResilientApp(app_manager.RyuApp):
             self.routers[dpid].packet_in(ev.msg)
 
     def _register_router(self, dp):
-        router = Router(dp, self.logger)
+        router = Router(dp, self._routing)
+        self._routing.register_router(router)
         self.routers[dp.id] = router
         self.logger.info('Router %d comes up.', dp.id)
 

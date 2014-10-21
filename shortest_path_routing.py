@@ -1,5 +1,7 @@
 import logging
 
+from constants import ARP
+
 from routing import Routing, BaseRoute
 from utils import nw_addr_aton, ip_addr_aton, ip_addr_ntoa, ipv4_apply_mask
 
@@ -9,6 +11,9 @@ class ShortestPathRouting(Routing):
         super(ShortestPathRouting, self).__init__()
         self._logger = logging.getLogger(__name__)
         self._routing_tables = {}
+
+    def register_router(self, router):
+        self._routing_tables[router.dp.id] = _RoutingTable(self._logger)
 
     def routing(self, links, switches, routers):
         dpids = [switch.ports[0].dpid for switch in switches]
@@ -21,8 +26,6 @@ class ShortestPathRouting(Routing):
                     continue
                 self._logger.info("ip %s, nw %s, mask %d", port.ip, port.nw,
                                   port.netmask)
-        self._routing_tables = {dpid: _RoutingTable(self._logger) for dpid in
-                                dpids}
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                  for src_dpid in dpids}
         via = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
@@ -74,11 +77,59 @@ class ShortestPathRouting(Routing):
                     self._logger.info("%s via %s", port.ip, gateway_ip)
                     self._routing_tables[src].add(router,
                                                   dst_str,
+                                                  gateway_ip,
                                                   out_link.src.hw_addr,
                                                   out_link.dst.hw_addr,
-                                                  gateway_ip,
-                                                  out_link.src.port_no,
-                                                  router)
+                                                  out_link.src.port_no)
+        return {src_dpid: {dst_dpid: via[src_dpid][dst_dpid].to_dict()
+                           for dst_dpid in dpids
+                           if via[src_dpid][dst_dpid] is not None}
+                for src_dpid in dpids}
+
+    def get_routing_data_by_dst_ip(self, dpid, dst_ip):
+        for route in self._routing_tables[dpid].values():
+            if dst_ip == route.dst_ip:
+                return route
+
+    def get_routing_data_by_gateway_mac(self, dpid, gateway_mac):
+        for route in self._routing_tables[dpid].values():
+            if gateway_mac == route.gateway_mac:
+                return route
+
+    def get_gateways(self, dpid):
+        return [route.gateway_ip for route in
+                self._routing_tables[dpid].values()]
+
+    def update_mac(self, router, msg, headers):
+        # Set flow: routing to gateway.
+        out_port = router.ofctl.get_packetin_inport(msg)
+        src_mac = headers[ARP].src_mac
+        dst_mac = router.ports[out_port].mac
+        src_ip = headers[ARP].src_ip
+
+        gateway_flg = False
+        self._logger.info("dpid----> %d", router.dp.id)
+        for key, value in self._routing_tables[router.dp.id].items():
+            if value.gateway_ip == src_ip:
+                gateway_flg = True
+                if value.gateway_mac == src_mac:
+                    continue
+                self._routing_tables[router.dp.id][key].gateway_mac = src_mac
+
+                # cookie = self._id_to_cookie(REST_ROUTEID, value.route_id)
+                # priority, log_msg = self._get_priority(PRIORITY_TYPE_ROUTE,
+                # route=value)
+                # self.ofctl.set_routing_flow(cookie, priority, out_port,
+                # dl_vlan=self.vlan_id,
+                # src_mac=dst_mac,
+                # dst_mac=src_mac,
+                # nw_dst=value.dst_ip,
+                # dst_mask=value.netmask,
+                # dec_ttl=True)
+                # self.logger.info('Set %s flow [cookie=0x%x]', log_msg,
+                # cookie,
+                # extra=self.sw_id)
+        return gateway_flg
 
 
 class _RoutingTable(dict):
@@ -88,7 +139,7 @@ class _RoutingTable(dict):
         self.route_id = 1
 
     def add(self, router, dst_ip, gateway_ip, src_mac, gateway_mac, out_port):
-        dst, net_mask, dummy = nw_addr_aton(dst_ip)
+        dst, netmask, dummy = nw_addr_aton(dst_ip)
         gateway_ip = ip_addr_aton(gateway_ip)
 
         overlap_route = None
@@ -100,10 +151,10 @@ class _RoutingTable(dict):
                              overlap_route)
             return
 
-        routing_data = BaseRoute(self.route_id, dst, net_mask, gateway_ip,
+        routing_data = BaseRoute(self.route_id, dst, netmask, gateway_ip,
                                  src_mac, gateway_mac, out_port)
         ip_str = ip_addr_ntoa(dst)
-        key = '%s/%d' % (ip_str, net_mask)
+        key = '%s/%d' % (ip_str, netmask)
         self[key] = routing_data
         self.route_id += 1
 
@@ -134,4 +185,3 @@ class _RoutingTable(dict):
                         get_route = route
                         mask = route.netmask
             return get_route
-
