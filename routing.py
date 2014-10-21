@@ -3,9 +3,6 @@ import logging
 from utils import ipv4_apply_mask, nw_addr_aton, ip_addr_aton, ip_addr_ntoa
 
 
-_logger = logging.getLogger(__name__)
-
-
 class Routing(object):
     def __init__(self):
         super(Routing, self).__init__()
