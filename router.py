@@ -379,7 +379,8 @@ class Router():
         src_port = self.ports.get_by_ip(headers[ARP].src_ip) 
         if src_port is None:
             return
-        if self._update_routing_tbl(msg, headers):
+        if self._update_routing_tbl(msg, headers) is False:
+            self.logger.info('Src %s is unknown, learning its mac')
             self._learning_host_mac(msg, headers)
         in_port = self.ofctl.get_packetin_inport(msg)
         src_ip = headers[ARP].src_ip
@@ -398,7 +399,7 @@ class Router():
                 output = self.ofctl.dp.ofproto.OFPP_NORMAL
                 self.ofctl.send_packet_out(in_port, output, msg.data)
         else:
-            if headers[ARP].opcode == arp.ARP_REV_REQUEST:
+            if headers[ARP].opcode == arp.ARP_REQUEST:
                 src_mac = headers[ARP].src_mac
                 dst_mac = self.ports[in_port].mac
                 arp_target_mac = dst_mac
@@ -406,6 +407,7 @@ class Router():
                 in_port = self.ofctl.dp.ofproto.OFPP_CONTROLLER
                 self.ofctl.send_arp(arp.ARP_REPLY, dst_mac, src_mac, dst_ip,
                                     src_ip, arp_target_mac, in_port, output)
+                self.logger.info('Sending ARP reply to %s via port %d', dst_ip, output)
             elif headers[ARP].opcode == arp.ARP_REPLY:
                 packet_list = self.packet_buffer.get_data(src_ip)
                 if packet_list:
@@ -483,12 +485,12 @@ class Router():
                 # cookie = self._id_to_cookie(REST_ADDRESSID, address.address_id)
                 priority, dummy = get_priority(PRIORITY_IMPLICIT_ROUTING)
                 self.ofctl.set_routing_flow(0, priority,
-                                            out_port, dl_vlan=self.vlan_id,
+                                            out_port,
                                             src_mac=dst_mac, dst_mac=src_mac,
                                             nw_dst=src_ip,
                                             idle_timeout=IDLE_TIMEOUT,
                                             dec_ttl=True)
-                self.logger.info('Set implicit routing flow [cookie=0x%x]')
+                self.logger.info('Set implicit routing flow to %s', src_ip)
 
     def _update_routing_tbl(self, msg, header_list):
         # Set flow: routing to gateway.
