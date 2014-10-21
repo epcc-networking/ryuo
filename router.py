@@ -4,7 +4,7 @@ import struct
 
 from webob import Response
 from ryu.base import app_manager
-from ryu.app.wsgi import route
+from ryu.app.wsgi import route as rest_route
 from ryu.app.wsgi import ControllerBase
 from ryu.app.wsgi import WSGIApplication
 from ryu.controller import dpset
@@ -32,6 +32,7 @@ from ryu.topology.api import get_all_link
 MAX_SUSPENDPACKETS = 50  # Threshold of the packet suspends thread count.
 DEFAULT_TTL = 64
 ARP_REPLY_TIMER = 2  # sec
+IDLE_TIMEOUT = 1800  # sec
 
 PORTNO_PATTERN = r'[0-9]{1,8}|all'
 ROUTER_ID_PATTERN = dpid_lib.DPID_PATTERN + r'|all'
@@ -46,17 +47,17 @@ class RouterRestController(ControllerBase):
         super(RouterRestController, self).__init__(req, link, data, **config)
         self.router_app = data['router_app']
 
-    @route('topo', '/topo/links', methods=['GET'])
+    @rest_route('topo', '/topo/links', methods=['GET'])
     def get_links(self, req, **kwargs):
         links = self.router_app.get_all_links()
         return JsonResponse([link.to_dict() for link in links])
 
-    @route('topo', '/topo/switches', methods=['GET'])
+    @rest_route('topo', '/topo/switches', methods=['GET'])
     def get_switches(self, req, **kwargs):
         switches = self.router_app.get_all_switches()
         return JsonResponse([switch.to_dict() for switch in switches])
 
-    @route('route', '/router/{router_id}', methods=['GET'],
+    @rest_route('route', '/router/{router_id}', methods=['GET'],
            requirements={'router_id': ROUTER_ID_PATTERN})
     def get_router(self, req, **kwargs):
         router = self.router_app.get_router(int(kwargs['router_id']))
@@ -64,26 +65,27 @@ class RouterRestController(ControllerBase):
             return ErrorResponse(404, 'Router not found')
         return JsonResponse(router)
 
-    @route('router', '/router/{router_id}/{port_no}', methods=['GET'],
+    @rest_route('router', '/router/{router_id}/{port_no}', methods=['GET'],
            requirements={'router_id': ROUTER_ID_PATTERN,
                          'port_no': PORTNO_PATTERN})
     def get_port(self, req, **kwargs):
         return JsonResponse(self.router_app.get_port(int(kwargs['router_id']),
-                                                int(kwargs['port_no']))) 
+                                                     int(kwargs['port_no'])))
 
-    @route('router', '/router/{router_id}/{port_no}/address',
+    @rest_route('router', '/router/{router_id}/{port_no}/address',
            methods=['POST'],
            requirements={'router_id': ROUTER_ID_PATTERN,
                          'port_no': PORTNO_PATTERN})
-    def set_port_address(self, req, **kwargs):
-        address = kwargs.get('address') 
+    def set_port_address(self, req, router_id, port_no, **kwargs):
+        address = eval(req.body).get('address')
+        self.router_app.logger.info("%s %s %s", router_id, port_no, address)
         if address is None:
             return ErrorResponse(400, 'Empty address.')
-        return JsonResponse(address,
-                            self.router_app.set_port(int(kwargs['router_id']),
-                                                     int(kwargs['port_no'])))
+        return JsonResponse(self.router_app.set_port_address(address,
+                                                             int(router_id),
+                                                             int(port_no)))
 
-    @route('router', '/router/{router_id}/{port_no}/address',
+    @rest_route('router', '/router/{router_id}/{port_no}/address',
            methods=['DELETE'],
            requirements={'router_id': ROUTER_ID_PATTERN,
                          'port_no': PORTNO_PATTERN})
@@ -93,7 +95,7 @@ class RouterRestController(ControllerBase):
                 int(kwargs['router_id']),
                 int(kwargs['port_no'])))
 
-    @route('router', '/router/routing', methods=['POST'])
+    @rest_route('router', '/router/routing', methods=['POST'])
     def routing(self, req, **kwargs):
         return JsonResponse(self.router_app.routing())
 
@@ -125,7 +127,7 @@ class RouterApp(app_manager.RyuApp):
 
     def set_port_address(self, address, router_id, port_no):
         router = self.get_router(router_id)
-        return router.set_address(address, port_no)
+        return router.set_port_address(address, port_no)
 
     def del_port_address(self, router_id, port_no):
         return None 
@@ -169,6 +171,13 @@ class RouterApp(app_manager.RyuApp):
                             via[src][dst] = graph[src][k]
                         else:
                             via[src][dst] = via[src][k]
+        for router_id, router in self.routers.items():
+            self.logger.info('Router %d', router_id)
+            self.logger.info('Ports %s', str(router.ports.keys()))
+            for port in router.ports.values():
+                if port.ip is None:
+                    continue
+                self.logger.info("ip %s, nw %s, mask %d", port.ip, port.nw, port.netmask)
         # Routing entries
         for src in dpids:
             router = self.get_router(src)
@@ -180,14 +189,16 @@ class RouterApp(app_manager.RyuApp):
                 if out_link is None:
                     continue
                 self.logger.info(out_link)
-                for port in ports:
+                for port in ports.values():
+                    if port.ip is None:
+                        continue
                     addr = port.nw
                     gateway_ip = (self.get_router(out_link.dst.dpid)
-                                      .get_port(out_link.dst.port_no)
-                                      .get_ip())
-                    self.logger.info(gateway_ip)
+                                  .ports[out_link.dst.port_no]
+                                  .ip)
                     dst_str = '%s/%d' % (port.ip, port.netmask)
-                    router.set_routing_data(dst_str, 
+                    self.logger.info("%s via %s", port.ip, gateway_ip)
+                    router.set_routing_data(dst_str,
                                             out_link.src.hw_addr,
                                             out_link.dst.hw_addr,
                                             gateway_ip,
@@ -229,31 +240,42 @@ class Router():
         self.ofctl = OfCtl(dp, logger)
         self.packet_buffer = SuspendPacketList(self.send_icmp_unreach_error)
         self.routing_tbl = RoutingTable(self.logger)
-        
-    def set_ip(self, port_no, ip_str):
+        self._init_flows()
+
+    def set_port_address(self, ip_str, port_no):
         nw, mask, ip = nw_addr_aton(ip_str) 
         # Check overlaps
         mask_b = mask_ntob(mask)
         for port in self.ports.values():
+            if port.ip is None:
+                continue
             port_mask = mask_ntob(port.netmask)
             if (port.nw == ipv4_apply_mask(ip, port.netmask) 
                 or nw == ipv4_apply_mask(port.ip, mask)):
                 return None
-        if port_no in self.ports.keys():
+        if port_no not in self.ports.keys():
             return None
         self.ports[port_no].set_ip(nw, mask, ip)
+        self.logger.info('Setting IP %s/%d of %s', ip, mask, nw)
 
-        priority = get_priority(PRIORITY_MAC_LEARNING)
+        priority, dummy = get_priority(PRIORITY_MAC_LEARNING)
         self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=nw, dst_mask=mask)
         self.logger.info('Set MAC learning for %s', ip)
         # IP handling
-        priority = get_priority(PRIORITY_IP_HANDLING)
+        priority, dummy = get_priority(PRIORITY_IP_HANDLING)
         self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=ip)
         self.logger.info('Set IP handling for %s', ip)
         # L2 switching
-        # TODO
+        outport = self.ofctl.dp.ofproto.OFPP_NORMAL
+        priority, dummy = get_priority(PRIORITY_L2_SWITCHING)
+        self.ofctl.set_routing_flow(
+            0, priority, outport,
+            nw_src=nw, src_mask=mask,
+            nw_dst=nw, dst_mask=mask)
+        self.logger.info('Set L2 switching (normal) flow [cookie=0x%x]',
+                         0)
         # Send GARP
         self.send_arp_request(ip, ip)
         return {'ip': ip, 'mask': mask, 'nw': nw}
@@ -265,7 +287,7 @@ class Router():
         ports = [port]
         if port is None:
             ports = self.ports
-        for send_port in ports:
+        for send_port in ports.values():
             if in_port is None or in_port != send_port.port_no:
                 src_mac = send_port.mac
                 dst_mac = mac_lib.BROADCAST_STR
@@ -274,6 +296,7 @@ class Router():
                 output = send_port.port_no
                 self.ofctl.send_arp(arp.ARP_REQUEST, src_mac, dst_mac, src_ip,
                                     dst_ip, arp_target_mac, inport, output)
+        self.logger.info('Sending ARP request.')
 
     def packet_in(self, msg):
         pkt = packet.Packet(msg.data)
@@ -293,7 +316,7 @@ class Router():
             return self._packet_in_to_node(msg, headers)
 
     def get_ips(self):
-        return [port.ip for port in self.ports]
+        return [port.ip for port in self.ports.values()]
 
     def send_icmp_unreach_error(self, packet_buffer):
         # Send ICMP host unreach error.
@@ -320,11 +343,12 @@ class Router():
             route = self.routing_tbl.add(destination, gateway_ip, gateway_mac)
             if route is None:
                 self.logger.info('Routing entry creation failed')
+                return
             self._install_routing_entry(route, output, outmac, gateway_mac)
             return route.route_id
 
     def _install_routing_entry(self, route, output, src_mac, dst_mac):
-        priority = get_priority(PRIORITY_TYPE_ROUTE)
+        priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)
         self.ofctl.set_routing_flow(0, priority, output,
                                     src_mac=src_mac,
                                     dst_mac=dst_mac,
@@ -338,21 +362,29 @@ class Router():
         cookie = 0
         self.ofctl.set_sw_config_for_ttl()
         # ARP
-        priority = get_priority(PRIORITY_ARP_HANDLING)
+        priority, dummy = get_priority(PRIORITY_ARP_HANDLING)
         self.ofctl.set_packetin_flow(cookie, priority, dl_type=ether.ETH_TYPE_ARP)
         # Drop by default 
-        priority = get_priority(PRIORITY_DEFAULT_ROUTING)
+        priority, dummy = get_priority(PRIORITY_DEFAULT_ROUTING)
         outport = None
         self.ofctl.set_routing_flow(cookie, priority, outport)
         self.ofctl.set_routing_flow_v6(cookie, priority, outport)
+        # Set flow: L2 switching (normal)
+        priority, dummy = get_priority(PRIORITY_NORMAL)
+        self.ofctl.set_normal_flow(cookie, priority)
+        self.logger.info('Set L2 switching (normal) flow [cookie=0x%x]',
+                         cookie)
 
     def _packet_in_arp(self, msg, headers):
         src_port = self.ports.get_by_ip(headers[ARP].src_ip) 
         if src_port is None:
             return
+        if self._update_routing_tbl(msg, headers):
+            self._learning_host_mac(msg, headers)
         in_port = self.ofctl.get_packetin_inport(msg)
         src_ip = headers[ARP].src_ip
         dst_ip = headers[ARP].dst_ip
+        self.logger.info('Receive ARP form %s to %s', src_ip, dst_ip)
         src_ip_str = ip_addr_ntoa(src_ip) 
         dst_ip_str = ip_addr_ntoa(dst_ip)
         rt_ips = self.get_ips()
@@ -435,6 +467,57 @@ class Router():
         in_port = self.ofctl.get_packetin_inport(msg)
         self.ofctl.send_icmp(in_port, headers, icmp.ICMP_DEST_UNREACH,
                              icmp.ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
+
+
+    def _learning_host_mac(self, msg, header_list):
+        # Set flow: routing to internal Host.
+        out_port = self.ofctl.get_packetin_inport(msg)
+        src_mac = header_list[ARP].src_mac
+        dst_mac = self.ports[out_port].mac
+        src_ip = header_list[ARP].src_ip
+
+        gateways = self.routing_tbl.get_gateways()
+        if src_ip not in gateways:
+            port = self.ports.get_by_ip(src_ip)
+            if port is not None:
+                # cookie = self._id_to_cookie(REST_ADDRESSID, address.address_id)
+                priority, dummy = get_priority(PRIORITY_IMPLICIT_ROUTING)
+                self.ofctl.set_routing_flow(0, priority,
+                                            out_port, dl_vlan=self.vlan_id,
+                                            src_mac=dst_mac, dst_mac=src_mac,
+                                            nw_dst=src_ip,
+                                            idle_timeout=IDLE_TIMEOUT,
+                                            dec_ttl=True)
+                self.logger.info('Set implicit routing flow [cookie=0x%x]')
+
+    def _update_routing_tbl(self, msg, header_list):
+        # Set flow: routing to gateway.
+        out_port = self.ofctl.get_packetin_inport(msg)
+        src_mac = header_list[ARP].src_mac
+        dst_mac = self.ports[out_port].mac
+        src_ip = header_list[ARP].src_ip
+
+        gateway_flg = False
+        for key, value in self.routing_tbl.items():
+            if value.gateway_ip == src_ip:
+                gateway_flg = True
+                if value.gateway_mac == src_mac:
+                    continue
+                self.routing_tbl[key].gateway_mac = src_mac
+
+                # cookie = self._id_to_cookie(REST_ROUTEID, value.route_id)
+                # priority, log_msg = self._get_priority(PRIORITY_TYPE_ROUTE,
+                # route=value)
+                #self.ofctl.set_routing_flow(cookie, priority, out_port,
+                #                            dl_vlan=self.vlan_id,
+                #                            src_mac=dst_mac,
+                #                            dst_mac=src_mac,
+                #                            nw_dst=value.dst_ip,
+                #                            dst_mask=value.netmask,
+                #                            dec_ttl=True)
+                #self.logger.info('Set %s flow [cookie=0x%x]', log_msg, cookie,
+                #@                 extra=self.sw_id)
+        return gateway_flg
 
     def _get_send_port_ip(self, headers):
         try:
@@ -547,11 +630,11 @@ class Port(object):
         self.mac = mac
         self.ip = None 
         self.nw = None
-        self.mask = None
+        self.netmask = None
     
     def set_ip(self, nw, mask, ip):
         self.nw = nw
-        self.mask = mask
+        self.netmask = mask
         self.ip = ip
 
 
@@ -613,8 +696,18 @@ class OfCtl(object):
         # data_str = str(packet.Packet(data))
         # self.logger.debug('Packet out = %s', data_str, extra=self.sw_id)
 
+    def set_normal_flow(self, cookie, priority):
+        out_port = self.dp.ofproto.OFPP_NORMAL
+        actions = [self.dp.ofproto_parser.OFPActionOutput(out_port, 0)]
+        self.set_flow(cookie, priority, actions=actions)
+
     def get_packetin_inport(self, msg):
-        return msg.in_port
+        in_port = self.dp.ofproto.OFPP_ANY
+        for match_field in msg.match.fields:
+            if match_field.header == self.dp.ofproto.OXM_OF_IN_PORT:
+                in_port = match_field.value
+                break
+        return in_port
 
     def set_routing_flow(self, cookie, priority, outport, dl_vlan=0,
                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
@@ -645,7 +738,7 @@ class OfCtl(object):
                               nw_src=nw_src, src_mask=src_mask, nw_dst=nw_dst,
                               dst_mask=dst_mask, src_mac=src_mac,
                               dst_mac=dst_mac, idle_timeout=idle_timeout,
-                              dec_ttl=dec_ttl)
+                              dec_ttl=dec_ttl, dl_type=ether.ETH_TYPE_IPV6)
 
     def set_sw_config_for_ttl(self):
         packet_in_mask = (1 << self.dp.ofproto.OFPR_ACTION |
@@ -694,7 +787,6 @@ class OfCtl(object):
         actions = actions or []
         inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
                                                  actions)]
-
         m = ofp_parser.OFPFlowMod(self.dp, cookie, 0, 0, cmd, idle_timeout,
                                   0, priority, UINT32_MAX, ofp.OFPP_ANY,
                                   ofp.OFPG_ANY, 0, match, inst)
@@ -819,10 +911,7 @@ def get_priority(priority_type, vid=0, route=None):
     if priority_type > PRIORITY_STATIC_ROUTING:
         priority += PRIORITY_NETMASK_SHIFT
 
-    if log_msg is None:
-        return priority
-    else:
-        return priority, log_msg
+    return priority, log_msg
 
 
 def ip_addr_aton(ip_str, err_msg=None):
