@@ -1,5 +1,3 @@
-import logging
-
 from constants import ARP
 
 from routing import Routing, BaseRoute
@@ -9,7 +7,6 @@ from utils import nw_addr_aton, ip_addr_aton, ip_addr_ntoa, ipv4_apply_mask
 class ShortestPathRouting(Routing):
     def __init__(self):
         super(ShortestPathRouting, self).__init__()
-        self._logger = logging.getLogger(__name__)
         self._routing_tables = {}
 
     def register_router(self, router):
