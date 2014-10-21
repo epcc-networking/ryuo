@@ -21,18 +21,6 @@ from ofctl import OfCtl
 from utils import *
 from constants import *
 
-MAX_SUSPENDPACKETS = 50  # Threshold of the packet suspends thread count.
-DEFAULT_TTL = 64
-ARP_REPLY_TIMER = 2  # sec
-IDLE_TIMEOUT = 1800  # sec
-
-PORTNO_PATTERN = r'[0-9]{1,8}|all'
-ROUTER_ID_PATTERN = dpid_lib.DPID_PATTERN + r'|all'
-
-UINT16_MAX = 0xffff
-UINT32_MAX = 0xffffffff
-UINT64_MAX = 0xffffffffffffffff
-
 
 class RouterRestController(ControllerBase):
     def __init__(self, req, link, data, **config):
@@ -501,7 +489,7 @@ class Router():
                 # priority, log_msg = self._get_priority(PRIORITY_TYPE_ROUTE,
                 # route=value)
                 # self.ofctl.set_routing_flow(cookie, priority, out_port,
-                #                            dl_vlan=self.vlan_id,
+                # dl_vlan=self.vlan_id,
                 #                            src_mac=dst_mac,
                 #                            dst_mac=src_mac,
                 #                            nw_dst=value.dst_ip,

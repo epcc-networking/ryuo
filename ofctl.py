@@ -196,11 +196,3 @@ class OfCtl(object):
         self.send_packet_out(in_port, output, pkt.data, data_str=str(pkt))
 
 
-def mask_ntob(mask, err_msg=None):
-    try:
-        return (UINT32_MAX << (32 - mask)) & UINT32_MAX
-    except ValueError:
-        msg = 'illegal netmask'
-        if err_msg is not None:
-            msg = '%s %s' % (err_msg, msg)
-        raise ValueError(msg)
