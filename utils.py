@@ -3,7 +3,7 @@ import struct
 
 from ryu.lib import addrconv
 
-from constants import *
+from constants import UINT32_MAX
 
 
 def mask_ntob(mask, err_msg=None):

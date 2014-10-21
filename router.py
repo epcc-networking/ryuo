@@ -1,5 +1,8 @@
 import json
 
+from ryu.lib.packet.arp import arp
+from ryu.lib.packet.icmp import icmp
+
 from webob import Response
 from ryu.base import app_manager
 from ryu.app.wsgi import route as rest_route
@@ -17,9 +20,16 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
+from constants import ROUTER_ID_PATTERN, PORTNO_PATTERN, \
+    PRIORITY_MAC_LEARNING, \
+    PRIORITY_IP_HANDLING, PRIORITY_L2_SWITCHING, ARP, IPV4, ICMP, TCP, UDP, \
+    PRIORITY_TYPE_ROUTE, PRIORITY_ARP_HANDLING, PRIORITY_DEFAULT_ROUTING, \
+    PRIORITY_NORMAL, MAX_SUSPENDPACKETS, PRIORITY_IMPLICIT_ROUTING, \
+    IDLE_TIMEOUT, ETHERNET, ARP_REPLY_TIMER, PRIORITY_STATIC_ROUTING, \
+    PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT
 from ofctl import OfCtl
-from utils import *
-from constants import *
+from utils import nw_addr_aton, mask_ntob, ipv4_apply_mask, ip_addr_ntoa, \
+    ip_addr_aton
 
 
 class RouterRestController(ControllerBase):
@@ -156,7 +166,8 @@ class RouterApp(app_manager.RyuApp):
             for port in router.ports.values():
                 if port.ip is None:
                     continue
-                self.logger.info("ip %s, nw %s, mask %d", port.ip, port.nw, port.netmask)
+                self.logger.info("ip %s, nw %s, mask %d", port.ip, port.nw,
+                                 port.netmask)
         # Routing entries
         for src in dpids:
             router = self.get_router(src)
@@ -343,7 +354,8 @@ class Router():
         self.ofctl.set_sw_config_for_ttl()
         # ARP
         priority, dummy = get_priority(PRIORITY_ARP_HANDLING)
-        self.ofctl.set_packetin_flow(cookie, priority, dl_type=ether.ETH_TYPE_ARP)
+        self.ofctl.set_packetin_flow(cookie, priority,
+                                     dl_type=ether.ETH_TYPE_ARP)
         # Drop by default 
         priority, dummy = get_priority(PRIORITY_DEFAULT_ROUTING)
         outport = None
@@ -360,7 +372,8 @@ class Router():
         if src_port is None:
             return
         if self._update_routing_tbl(msg, headers) is False:
-            self.logger.info('Src %s is unknown, learning its mac', headers[ARP].src_ip)
+            self.logger.info('Src %s is unknown, learning its mac',
+                             headers[ARP].src_ip)
             self._learning_host_mac(msg, headers)
         in_port = self.ofctl.get_packetin_inport(msg)
         src_ip = headers[ARP].src_ip
@@ -387,7 +400,8 @@ class Router():
                 in_port = self.ofctl.dp.ofproto.OFPP_CONTROLLER
                 self.ofctl.send_arp(arp.ARP_REPLY, dst_mac, src_mac, dst_ip,
                                     src_ip, arp_target_mac, in_port, output)
-                self.logger.info('Sending ARP reply to %s via port %d', dst_ip, output)
+                self.logger.info('Sending ARP reply to %s via port %d', dst_ip,
+                                 output)
             elif headers[ARP].opcode == arp.ARP_REPLY:
                 packet_list = self.packet_buffer.get_data(src_ip)
                 if packet_list:
@@ -460,7 +474,8 @@ class Router():
         if src_ip not in gateways:
             port = self.ports.get_by_ip(src_ip)
             if port is not None:
-                # cookie = self._id_to_cookie(REST_ADDRESSID, address.address_id)
+                # cookie = self._id_to_cookie(REST_ADDRESSID,
+                # address.address_id)
                 priority, dummy = get_priority(PRIORITY_IMPLICIT_ROUTING)
                 self.ofctl.set_routing_flow(0, priority,
                                             out_port,
@@ -490,9 +505,9 @@ class Router():
                 # route=value)
                 # self.ofctl.set_routing_flow(cookie, priority, out_port,
                 # dl_vlan=self.vlan_id,
-                #                            src_mac=dst_mac,
-                #                            dst_mac=src_mac,
-                #                            nw_dst=value.dst_ip,
+                # src_mac=dst_mac,
+                # dst_mac=src_mac,
+                # nw_dst=value.dst_ip,
                 #                            dst_mask=value.netmask,
                 #                            dec_ttl=True)
                 #self.logger.info('Set %s flow [cookie=0x%x]', log_msg, cookie,
