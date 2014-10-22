@@ -13,8 +13,6 @@ class KFRouting(Routing):
         dpids = [switch.ports[0].dpid for switch in switches]
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                  for src_dpid in dpids}
-        link_type = {src: {dst: None for dst in dpids}
-                     for src in dpids}
         degree = {src: 0 for src in dpids}
         for link in links:
             dst = link.dst.dpid
@@ -28,7 +26,7 @@ class KFRouting(Routing):
             bfs_q.put(dst)
             level[dst] = 0
             dst_ips = ['%s/%d' % (port.ip, port.netmask) for port in
-                       routers.get(dst).ports.values()]
+                       routers.get(dst).ports.values() if port.ip is not None]
             # build PSNs for each destination
             while not bfs_q.empty():
                 node = bfs_q.get()
@@ -44,19 +42,19 @@ class KFRouting(Routing):
                 ports = routers.get(src).ports
                 candidates = [link for link in links if link.src.dpid == src]
                 for in_port in ports:
-                    sorted_candidates = sorted(candidates, cmp=lambda x, y:
-                    self._compare_link(
-                        x, y, level, degree, in_port))
+                    sorted_candidates = sorted(candidates,
+                                               cmp=lambda x, y:
+                                               KFRouting._compare_link(x, y,
+                                                                       level,
+                                                                       degree,
+                                                                       in_port))
                     sorted_ports = [link.src.port_no for link in
                                     sorted_candidates]
                     src_macs = [link.src.hw_addr for link in sorted_candidates]
                     dst_macs = [link.dst.hw_addr for link in sorted_candidates]
                     group_id = router.set_group(sorted_ports, src_macs,
                                                 dst_macs)
-                    for dst_port in routers[dst].ports.values():
-                        if dst_port.ip is None:
-                            continue
-                        dst_str = '%s/%d' % (dst_port.ip, dst_port.netmask)
+                    for dst_str in dst_ips:
                         self._logger.info('%s from port %d to ports %s',
                                           dst_str, in_port, str(sorted_ports))
                         self._routing_tables[src].add(router,
@@ -67,7 +65,8 @@ class KFRouting(Routing):
                                                       None,
                                                       group_id)
 
-    def _compare_link(self, l1, l2, level, degree, in_port):
+    @staticmethod
+    def _compare_link(l1, l2, level, degree, in_port):
         if l1.src.port_no == in_port:
             return 1
         if l2.src.port_no == in_port:
