@@ -40,7 +40,8 @@ class OfCtl(object):
     def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
-                         dl_type=ether.ETH_TYPE_IP, in_port=None):
+                         dl_type=ether.ETH_TYPE_IP, in_port=None,
+                         out_group=None):
         ofp_parser = self.dp.ofproto_parser
 
         actions = []
@@ -52,6 +53,8 @@ class OfCtl(object):
             actions.append(ofp_parser.OFPActionSetField(eth_dst=dst_mac))
         if out_port is not None:
             actions.append(ofp_parser.OFPActionOutput(out_port, 0))
+        if out_group is not None:
+            actions.append(ofp_parser.OFPActionGroup(group_id=out_group))
 
         self.set_flow(cookie, priority, dl_type=dl_type, dl_vlan=dl_vlan,
                       nw_src=nw_src, src_mask=src_mask,
@@ -61,7 +64,8 @@ class OfCtl(object):
 
     def set_routing_flow_v6(self, cookie, priority, outport, dl_vlan=0,
                             nw_src=0, src_mask=128, nw_dst=0, dst_mask=128,
-                            src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False):
+                            src_mac=0, dst_mac=0, idle_timeout=0,
+                            dec_ttl=False):
         self.set_routing_flow(cookie, priority, outport, dl_vlan=dl_vlan,
                               nw_src=nw_src, src_mask=src_mask, nw_dst=nw_dst,
                               dst_mask=dst_mask, src_mac=src_mac,
@@ -129,6 +133,21 @@ class OfCtl(object):
         self.set_flow(cookie, priority, dl_type=dl_type, dl_dst=dl_dst,
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
                       nw_proto=nw_proto, actions=actions)
+
+    def set_group(self, group_id, ports, src_macs, dst_macs):
+        ofp_parser = self.dp.ofproto_parser
+        actions = [[ofp_parser.OFPActionSetField(eth_src=src_macs[i]),
+                    ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
+                    ofp_parser.OFPActionOutput(port)]
+                   for i, port in enumerate(ports)]
+        buckets = [ofp_parser.OFPBucket(0, port, 0, actions[i]) for
+                   i, port in enumerate(ports)]
+        req = ofp_parser.OFPGroupMod(self.dp,
+                                     self.dp.ofproto.OFPFC_ADD,
+                                     self.dp.ofproto.OFPGT_FF,
+                                     group_id,
+                                     buckets)
+        self.dp.send_msg(req)
 
     def send_icmp(self, in_port, protocol_list, icmp_type, icmp_code,
                   icmp_data=None, msg_data=None, src_ip=None):

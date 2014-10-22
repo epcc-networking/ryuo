@@ -11,6 +11,10 @@ class ShortestPathRouting(Routing):
     def register_router(self, router):
         self._routing_tables[router.dp.id] = BaseRoutingTable(self._logger)
 
+    def unregister_router(self, dpid):
+        del self._routing_tables[dpid]
+        # TODO: recalculate routing table
+
     def routing(self, links, switches, routers):
         dpids = [switch.ports[0].dpid for switch in switches]
         self._logger.info('Connected routers: %s', str(dpids))

@@ -26,6 +26,7 @@ class Router():
         self.ofctl = OfCtl(dp, self._logger)
         self.packet_buffer = SuspendPacketList(self.send_icmp_unreach_error)
         self._init_flows()
+        self._group_id = 1
 
     def set_port_address(self, ip_str, port_no):
         nw, mask, ip = nw_addr_aton(ip_str)
@@ -116,6 +117,11 @@ class Router():
             self._logger.info('Send ICMP unreachable to %s',
                               packet_buffer.dst_ip)
 
+    def set_group(self, ports, src_macs, dst_macs):
+        self.ofctl.set_group(self._group_id, ports, src_macs, dst_macs)
+        self._group_id += 1
+        return self._group_id - 1
+
     def install_routing_entry(self, route):
         priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)
         self.ofctl.set_routing_flow(0, priority, route.out_port,
@@ -124,7 +130,8 @@ class Router():
                                     nw_dst=route.dst_ip,
                                     dst_mask=route.netmask,
                                     dec_ttl=True,
-                                    in_port=route.in_port)
+                                    in_port=route.in_port,
+                                    out_group=route.out_group)
 
     def _install_routing_entry(self, route, output, src_mac, dst_mac):
         priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)
@@ -235,6 +242,7 @@ class Router():
             if route is not None:
                 self._logger.info('Receive IP packet from %s to %s.', src_ip,
                                   dst_ip)
+                # Which port is in the same network with the gateway
                 gateway = self.ports.get_by_ip(route.gateway_ip)
                 if gateway is not None:
                     src_ip = gateway.ip

@@ -16,6 +16,9 @@ class Routing(object):
     def register_router(self, router):
         raise NotImplementedError()
 
+    def unregister_router(self, dpid):
+        raise NotImplementedError()
+
     def get_routing_data_by_dst_ip(self, dpid, dst_ip):
         raise NotImplementedError()
 
@@ -31,7 +34,7 @@ class Routing(object):
 
 class BaseRoute(object):
     def __init__(self, route_id, dst_ip, netmask, gateway_ip, src_mac,
-                 gateway_mac, out_port, in_port=None):
+                 gateway_mac, out_port, in_port=None, out_group=None):
         super(BaseRoute, self).__init__()
         self.route_id = route_id
         self.dst_ip = dst_ip
@@ -41,31 +44,32 @@ class BaseRoute(object):
         self.gateway_mac = gateway_mac
         self.out_port = out_port
         self.in_port = in_port
+        self.out_group = out_group
 
 
 class BaseRoutingTable(dict):
     def __init__(self, logger):
         super(BaseRoutingTable, self).__init__()
-        self.logger = logger
+        self._logger = logger
         self.route_id = 1
 
-    def add(self, router, dst_ip, gateway_ip, src_mac, gateway_mac, out_port):
+    def add(self, router, dst_ip, gateway_ip, src_mac, gateway_mac, out_port,
+            in_port=None, out_group=None):
         dst, netmask, dummy = nw_addr_aton(dst_ip)
         gateway_ip = ip_addr_aton(gateway_ip)
-
+        ip_str = ip_addr_ntoa(dst)
+        key = '%s/%d' % (ip_str, netmask)
         overlap_route = None
-        if dst_ip in self:
-            overlap_route = self[dst_ip].route_id
+        if key in self:
+            overlap_route = self[key].route_id
 
         if overlap_route is not None:
-            self.logger.info('Destination overlaps route id: %d',
+            self._logger.info('Destination overlaps route id: %d',
                              overlap_route)
             return
 
         routing_data = BaseRoute(self.route_id, dst, netmask, gateway_ip,
                                  src_mac, gateway_mac, out_port)
-        ip_str = ip_addr_ntoa(dst)
-        key = '%s/%d' % (ip_str, netmask)
         self[key] = routing_data
         self.route_id += 1
 

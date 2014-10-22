@@ -82,4 +82,5 @@ class ResilientApp(app_manager.RyuApp):
         if dp.id in self.routers:
             self.routers[dp.id].delete()
             del self.routers[dp.id]
+            self._routing.unregister_router(dp.id)
             self._logger.info('Router %d leaves.', dp.id)
