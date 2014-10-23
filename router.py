@@ -1,7 +1,9 @@
 import logging
 
 from ryu.lib.packet.arp import ARP_REPLY, ARP_REQUEST
-from ryu.lib.packet.icmp import icmp, ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY
+from ryu.lib.packet.icmp import icmp, ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
+    ICMP_TIME_EXCEEDED, ICMP_TTL_EXPIRED_CODE, ICMP_PORT_UNREACH_CODE, \
+    ICMP_DEST_UNREACH
 from ryu.lib import hub
 from ryu.lib import mac as mac_lib
 from ryu.lib.packet import packet
@@ -219,12 +221,13 @@ class Router():
         self._logger.info('Receive invalid ttl packet from %s', srcip)
 
         in_port = self.ofctl.get_packetin_inport(msg)
-        src_ip = self._get_send_port_ip(headers)
+        src_ip = self.ports[in_port].ip
         if src_ip is not None:
-            self.ofctl.send_icmp(in_port, headers, icmp.ICMP_TIME_EXCEEDED,
-                                 icmp.ICMP_TTL_EXPIRED_CODE,
+            self.ofctl.send_icmp(in_port, headers, ICMP_TIME_EXCEEDED,
+                                 ICMP_TTL_EXPIRED_CODE,
                                  msg_data=msg.data, src_ip=src_ip)
-            self._logger('Send ICMP time exceeded to %s', src_ip)
+            self._logger.info('Send ICMP time exceeded to %s from %s', srcip,
+                              src_ip)
 
     def _packet_in_to_node(self, msg, headers):
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
@@ -262,8 +265,8 @@ class Router():
 
     def _packet_in_tcp_udp(self, msg, headers):
         in_port = self.ofctl.get_packetin_inport(msg)
-        self.ofctl.send_icmp(in_port, headers, icmp.ICMP_DEST_UNREACH,
-                             icmp.ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
+        self.ofctl.send_icmp(in_port, headers, ICMP_DEST_UNREACH,
+                             ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
 
     def _learning_host_mac(self, msg, header_list):
         # Set flow: routing to internal Host.
@@ -302,7 +305,8 @@ class Router():
         if port is not None:
             return port.ip
         else:
-            route = self._routing.get_routing_data_by_gateway_mac(src_mac)
+            route = self._routing.get_routing_data_by_gateway_mac(self.dp.id,
+                                                                  src_mac)
             if route is not None:
                 port = self.ports.get_by_ip(route.gateway_ip)
                 if port is not None:
