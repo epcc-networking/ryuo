@@ -134,14 +134,14 @@ class OfCtl(object):
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
                       nw_proto=nw_proto, actions=actions)
 
-    def set_group(self, group_id, ports, src_macs, dst_macs):
+    def set_group(self, group_id, watch_ports, out_ports, src_macs, dst_macs):
         ofp_parser = self.dp.ofproto_parser
         actions = [[ofp_parser.OFPActionSetField(eth_src=src_macs[i]),
                     ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
                     ofp_parser.OFPActionOutput(port)]
-                   for i, port in enumerate(ports)]
+                   for i, port in enumerate(out_ports)]
         buckets = [ofp_parser.OFPBucket(0, port, 0, actions[i]) for
-                   i, port in enumerate(ports)]
+                   i, port in enumerate(watch_ports)]
         req = ofp_parser.OFPGroupMod(self.dp,
                                      self.dp.ofproto.OFPFC_ADD,
                                      self.dp.ofproto.OFPGT_FF,

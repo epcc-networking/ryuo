@@ -119,8 +119,9 @@ class Router():
             self._logger.info('Send ICMP unreachable to %s',
                               packet_buffer.dst_ip)
 
-    def set_group(self, ports, src_macs, dst_macs):
-        self.ofctl.set_group(self._group_id, ports, src_macs, dst_macs)
+    def set_group(self, ports, src_macs, dst_macs, watch_ports, out_ports):
+        self.ofctl.set_group(self._group_id, watch_ports, out_ports, src_macs,
+                             dst_macs)
         self._group_id += 1
         return self._group_id - 1
 
