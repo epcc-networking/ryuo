@@ -1,7 +1,7 @@
 import logging
 
 from ryu.lib.packet.arp import ARP_REPLY, ARP_REQUEST
-from ryu.lib.packet.icmp import icmp
+from ryu.lib.packet.icmp import icmp, ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY
 from ryu.lib import hub
 from ryu.lib import mac as mac_lib
 from ryu.lib.packet import packet
@@ -256,8 +256,8 @@ class Router():
 
     def _packet_in_icmp_req(self, msg, headers):
         in_port = self.ofctl.get_packetin_inport(msg)
-        self.ofctl.send_icmp(in_port, headers, icmp.ICMP_ECHO_REPLY,
-                             icmp.ICMP_ECHO_REPLY_CODE,
+        self.ofctl.send_icmp(in_port, headers, ICMP_ECHO_REPLY,
+                             ICMP_ECHO_REPLY_CODE,
                              icmp_data=headers[ICMP].data)
 
     def _packet_in_tcp_udp(self, msg, headers):

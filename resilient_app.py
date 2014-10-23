@@ -10,9 +10,9 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
+from kf_routing import KFRouting
 from rest_controller import RestController
 from router import Router
-from shortest_path_routing import ShortestPathRouting
 from utils import config_logger
 
 
@@ -28,7 +28,7 @@ class ResilientApp(app_manager.RyuApp):
         config_logger(self._logger)
         wsgi = kwargs['wsgi']
         wsgi.register(RestController, {'router_app': self})
-        self._routing = ShortestPathRouting()
+        self._routing = KFRouting()
 
         self.routers = {}
 

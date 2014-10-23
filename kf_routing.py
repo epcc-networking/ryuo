@@ -9,6 +9,12 @@ class KFRouting(Routing):
         super(KFRouting, self).__init__()
         self._routing_tables = {}
 
+    def register_router(self, router):
+        self._routing_tables[router.dp.id] = _RoutingTable(self._logger)
+
+    def unregister_router(self, dpid):
+        del self._routing_tables[dpid]
+
     def routing(self, links, switches, routers):
         dpids = [switch.ports[0].dpid for switch in switches]
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
@@ -27,13 +33,17 @@ class KFRouting(Routing):
             level[dst] = 0
             dst_ips = ['%s/%d' % (port.ip, port.netmask) for port in
                        routers.get(dst).ports.values() if port.ip is not None]
+            visited = {src: False for src in dpids}
             # build PSNs for each destination
             while not bfs_q.empty():
                 node = bfs_q.get()
+                visited[node] = True
                 for link in links:
-                    if link.dst.dpid == node:
+                    if link.dst.dpid == node \
+                            and visited[link.src.dpid] is False:
                         level[link.src.dpid] = level[node] + 1
                         bfs_q.put(link.src.dpid)
+            self._logger.info('Level for dst=%d: %s', dst, str(level))
             # Get routing table
             for src in dpids:
                 if src == dst:
@@ -64,6 +74,7 @@ class KFRouting(Routing):
                                                       None,
                                                       None,
                                                       group_id)
+        return ''
 
     @staticmethod
     def _compare_link(l1, l2, level, degree, in_port):
@@ -75,6 +86,18 @@ class KFRouting(Routing):
         if level_diff != 0:
             return level_diff
         return degree[l2.dst.dpid] - degree[l1.dst.dpid]
+
+    def get_routing_data_by_dst_ip(self, dpid, dst_ip):
+        return None
+
+    def get_routing_data_by_gateway_mac(self, dpid, gateway_mac):
+        return None
+
+    def get_gateways(self, dpid):
+        return []
+
+    def update_mac(self, router, msg, headers):
+        return False
 
 
 class _RoutingTable(BaseRoutingTable):
