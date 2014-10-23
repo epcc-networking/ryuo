@@ -14,6 +14,7 @@ def config_logger(logger):
     logger.addHandler(handler)
     logger.propagate = False
 
+
 def mask_ntob(mask, err_msg=None):
     try:
         return (UINT32_MAX << (32 - mask)) & UINT32_MAX

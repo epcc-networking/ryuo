@@ -48,8 +48,11 @@ class KFRouting(Routing):
             for src in dpids:
                 if src == dst:
                     continue
+                self._logger.info('On router %d: ', src)
                 router = routers.get(src)
-                ports = routers.get(src).ports
+                ports = [port.port_no for port in
+                         routers.get(src).ports.values() if
+                         port.ip is not None]
                 candidates = [link for link in links if link.src.dpid == src]
                 for in_port in ports:
                     sorted_candidates = sorted(candidates,
@@ -57,7 +60,8 @@ class KFRouting(Routing):
                                                KFRouting._compare_link(x, y,
                                                                        level,
                                                                        degree,
-                                                                       in_port))
+                                                                       in_port)
+                    )
                     sorted_ports = [link.src.port_no for link in
                                     sorted_candidates]
                     src_macs = [link.src.hw_addr for link in sorted_candidates]
@@ -65,14 +69,17 @@ class KFRouting(Routing):
                     group_id = router.set_group(sorted_ports, src_macs,
                                                 dst_macs)
                     for dst_str in dst_ips:
-                        self._logger.info('%s from port %d to ports %s',
-                                          dst_str, in_port, str(sorted_ports))
+                        self._logger.info(
+                            '%s from port %d to ports %s group_id %d',
+                            dst_str, in_port, str(sorted_ports), group_id
+                        )
                         self._routing_tables[src].add(router,
                                                       dst_str,
                                                       None,
                                                       None,
                                                       None,
                                                       None,
+                                                      in_port,
                                                       group_id)
         return ''
 
@@ -108,7 +115,8 @@ class _RoutingTable(BaseRoutingTable):
             in_port=None, out_group=None):
         assert in_port is not None
         dst, netmask, dummy = nw_addr_aton(dst_ip)
-        gateway_ip = ip_addr_aton(gateway_ip)
+        if gateway_ip is not None:
+            gateway_ip = ip_addr_aton(gateway_ip)
         ip_str = ip_addr_ntoa(dst)
         key = _RoutingTable._get_route_key(ip_str, netmask, in_port)
         overlap_route = None
@@ -122,7 +130,7 @@ class _RoutingTable(BaseRoutingTable):
 
         routing_data = BaseRoute(self.route_id, dst, netmask, gateway_ip,
                                  src_mac, gateway_mac, out_port,
-                                 in_port=in_port)
+                                 in_port=in_port, out_group=out_group)
         self[key] = routing_data
         self.route_id += 1
 
