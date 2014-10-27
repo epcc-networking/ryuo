@@ -68,7 +68,6 @@ class ShortestPathRouting(Routing):
                             via[src][dst] = graph[src][k]
                         else:
                             via[src][dst] = via[src][k]
-        self._logger.info('tmp graph: %s', tmp_graph)
 
         # Routing entries
         for src in dpids:

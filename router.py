@@ -114,8 +114,10 @@ class Router():
         elif msg.reason == ofp.OFPPR_DELETE:
             self._on_port_down(port_no)
         elif msg.reason == ofp.OFPPR_MODIFY:
-            if msg.desc.state == ofp.OFPPS_LINK_DOWN:
+            if msg.desc.state & ofp.OFPPS_LINK_DOWN != 0:
                 self._on_port_down(port_no)
+            else:
+                self._on_port_up(port_no)
         if msg.reason != ofp.OFPPR_ADD and msg.reason != ofp.OFPPR_DELETE \
                 and msg.reason != ofp.OFPPR_MODIFY:
             self._logger.warning('Unknown port status message.')

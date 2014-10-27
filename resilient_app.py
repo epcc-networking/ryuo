@@ -10,7 +10,7 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
-from constants import LINK_UP
+from constants import LINK_UP, LINK_DOWN, PORT_UP
 from rest_controller import RestController
 from router import Router
 from shortest_path_routing import ShortestPathRouting
@@ -56,7 +56,7 @@ class ResilientApp(app_manager.RyuApp):
         return None
 
     def routing(self):
-        self._links = self.get_all_links()
+        self._links = self.get_all_links().keys()
         self._switches = self.get_all_switches()
         self._link_status = [LINK_UP] * len(self._links)
 
@@ -87,15 +87,16 @@ class ResilientApp(app_manager.RyuApp):
         msg = ev.msg
         dp = msg.datapath
         self.routers[dp.id].on_port_status_change(msg)
-        # self._link_status = [LINK_DOWN] * len(self._links)
         self._logger.info('Total links: %d', len(self._links))
-        #for idx, link in enumerate(self._links):
-        #    src_port = self.routers[link.src.dpid].ports[link.src.port_no]
-        #    dst_port = self.routers[link.dst.dpid].ports[link.dst.port_no]
-        #    if src_port.status == PORT_UP and dst_port.status == PORT_UP:
-        #        self._link_status[idx] = LINK_UP
-        #    else:
-        #        self._link_status[idx] = LINK_DOWN
+        # In case the topo discovery module not update yet
+        for idx, link in enumerate(self._links):
+            src_port = self.routers[link.src.dpid].ports[link.src.port_no]
+            dst_port = self.routers[link.dst.dpid].ports[link.dst.port_no]
+            if src_port.status == PORT_UP and dst_port.status == PORT_UP:
+                self._link_status[idx] = LINK_UP
+            else:
+                self._link_status[idx] = LINK_DOWN
+        self._logger.info('Link status: %s.', self._link_status)
         self._routing.on_port_status_change(msg, self._links,
                                             self._link_status, self._switches,
                                             self.routers)
