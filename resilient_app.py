@@ -10,9 +10,10 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
-from kf_routing import KFRouting
+from constants import LINK_UP
 from rest_controller import RestController
 from router import Router
+from shortest_path_routing import ShortestPathRouting
 from utils import config_logger
 
 
@@ -28,7 +29,10 @@ class ResilientApp(app_manager.RyuApp):
         config_logger(self._logger)
         wsgi = kwargs['wsgi']
         wsgi.register(RestController, {'router_app': self})
-        self._routing = KFRouting()
+        self._links = []
+        self._switches = []
+        self._link_status = []
+        self._routing = ShortestPathRouting(self)
 
         self.routers = {}
 
@@ -52,12 +56,18 @@ class ResilientApp(app_manager.RyuApp):
         return None
 
     def routing(self):
-        links = self.get_all_links()
-        switches = self.get_all_switches()
+        self._links = self.get_all_links()
+        self._switches = self.get_all_switches()
+        self._link_status = [LINK_UP] * len(self._links)
 
-        if links is None or switches is None:
+        # update links in ports
+        for link in self._links:
+            router = self.routers[link.src.dpid]
+            router.ports[link.src.port_no].add_link(link)
+
+        if self._links is None or self._switches is None:
             return
-        return self._routing.routing(links, switches, self.routers)
+        return self._routing.routing(self._links, self._switches, self.routers)
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def datapath_handler(self, ev):
@@ -71,6 +81,24 @@ class ResilientApp(app_manager.RyuApp):
         dpid = ev.msg.datapath.id
         if dpid in self.routers:
             self.routers[dpid].packet_in(ev.msg)
+
+    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
+    def port_status_change(self, ev):
+        msg = ev.msg
+        dp = msg.datapath
+        self.routers[dp.id].on_port_status_change(msg)
+        # self._link_status = [LINK_DOWN] * len(self._links)
+        self._logger.info('Total links: %d', len(self._links))
+        #for idx, link in enumerate(self._links):
+        #    src_port = self.routers[link.src.dpid].ports[link.src.port_no]
+        #    dst_port = self.routers[link.dst.dpid].ports[link.dst.port_no]
+        #    if src_port.status == PORT_UP and dst_port.status == PORT_UP:
+        #        self._link_status[idx] = LINK_UP
+        #    else:
+        #        self._link_status[idx] = LINK_DOWN
+        self._routing.on_port_status_change(msg, self._links,
+                                            self._link_status, self._switches,
+                                            self.routers)
 
     def _register_router(self, dp):
         router = Router(dp, self._routing)

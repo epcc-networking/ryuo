@@ -5,12 +5,17 @@ from utils import ipv4_apply_mask, nw_addr_aton, ip_addr_aton, ip_addr_ntoa, \
 
 
 class Routing(object):
-    def __init__(self):
+    def __init__(self, app):
         super(Routing, self).__init__()
+        self._app = app
         self._logger = logging.getLogger(type(self).__name__)
         config_logger(self._logger)
 
     def routing(self, links, switches, routers):
+        raise NotImplementedError()
+
+    def on_port_status_change(self, msg, links, link_status, switches,
+                              routers):
         raise NotImplementedError()
 
     def register_router(self, router):
@@ -65,7 +70,7 @@ class BaseRoutingTable(dict):
 
         if overlap_route is not None:
             self._logger.info('Destination overlaps route id: %d',
-                             overlap_route)
+                              overlap_route)
             return
 
         routing_data = BaseRoute(self.route_id, dst, netmask, gateway_ip,

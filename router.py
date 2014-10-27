@@ -14,7 +14,7 @@ from constants import PRIORITY_MAC_LEARNING, \
     PRIORITY_TYPE_ROUTE, PRIORITY_ARP_HANDLING, PRIORITY_DEFAULT_ROUTING, \
     PRIORITY_NORMAL, MAX_SUSPENDPACKETS, PRIORITY_IMPLICIT_ROUTING, \
     IDLE_TIMEOUT, ETHERNET, ARP_REPLY_TIMER, PRIORITY_STATIC_ROUTING, \
-    PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT
+    PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PORT_UP, PORT_DOWN
 from ofctl import OfCtl
 from utils import nw_addr_aton, mask_ntob, ipv4_apply_mask, ip_addr_ntoa
 
@@ -103,6 +103,42 @@ class Router():
                     return self._packet_in_tcp_udp(msg, headers)
             return self._packet_in_to_node(msg, headers)
 
+    def on_port_status_change(self, msg):
+        self._logger.info('Received port status message.')
+        ofp = self.dp.ofproto
+        port_no = msg.desc.port_no
+        if port_no not in self.ports:
+            return
+        if msg.reason == ofp.OFPPR_ADD:
+            self._on_port_up(port_no)
+        elif msg.reason == ofp.OFPPR_DELETE:
+            self._on_port_down(port_no)
+        elif msg.reason == ofp.OFPPR_MODIFY:
+            if msg.desc.state == ofp.OFPPS_LINK_DOWN:
+                self._on_port_down(port_no)
+        if msg.reason != ofp.OFPPR_ADD and msg.reason != ofp.OFPPR_DELETE \
+                and msg.reason != ofp.OFPPR_MODIFY:
+            self._logger.warning('Unknown port status message.')
+            return
+
+    def _on_port_down(self, port_no):
+        port = self.ports.get(port_no)
+        if port is None:
+            self._logger.error('Unknow port %d.', port_no)
+        if port.status == PORT_DOWN:
+            self._logger.warning('Port %d already down.', port_no)
+        port.status = PORT_DOWN
+        self._logger.info('Port %d down.', port_no)
+
+    def _on_port_up(self, port_no):
+        port = self.ports.get(port_no)
+        if port is None:
+            self._logger.error('Unknow port %d.', port_no)
+        if port.status == PORT_UP:
+            self._logger.warning('Port %d already up.', port_no)
+        port.status = PORT_UP
+        self._logger.info('Port %d up.', port_no)
+
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
 
@@ -119,7 +155,7 @@ class Router():
             self._logger.info('Send ICMP unreachable to %s',
                               packet_buffer.dst_ip)
 
-    def set_group(self, ports, src_macs, dst_macs, watch_ports, out_ports):
+    def set_group(self, src_macs, dst_macs, watch_ports, out_ports):
         self.ofctl.set_group(self._group_id, watch_ports, out_ports, src_macs,
                              dst_macs)
         self._group_id += 1
@@ -344,11 +380,16 @@ class Port(object):
         self.ip = None
         self.nw = None
         self.netmask = None
+        self.links = {}
+        self.status = PORT_UP
 
     def set_ip(self, nw, mask, ip):
         self.nw = nw
         self.netmask = mask
         self.ip = ip
+
+    def add_link(self, link):
+        self.links[link.dst.hw_addr] = link
 
 
 class SuspendPacketList(list):

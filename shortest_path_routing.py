@@ -1,12 +1,16 @@
 from constants import ARP
+from resilient_app import LINK_UP
 
 from routing import Routing, BaseRoutingTable
 
 
 class ShortestPathRouting(Routing):
-    def __init__(self):
-        super(ShortestPathRouting, self).__init__()
+    def __init__(self, app):
+        super(ShortestPathRouting, self).__init__(app)
         self._routing_tables = {}
+        self._switches = []
+        self._links = []
+        self._link_status = []
 
     def register_router(self, router):
         self._routing_tables[router.dp.id] = BaseRoutingTable(self._logger)
@@ -16,28 +20,37 @@ class ShortestPathRouting(Routing):
         # TODO: recalculate routing table
 
     def routing(self, links, switches, routers):
+        for routing_table in self._routing_tables.values():
+            routing_table.clear()
         dpids = [switch.ports[0].dpid for switch in switches]
         self._logger.info('Connected routers: %s', str(dpids))
-        for router_id, router in routers.items():
-            self._logger.info('Router %d', router_id)
-            self._logger.info('Ports %s', str(router.ports.keys()))
-            for port in router.ports.values():
-                if port.ip is None:
+        for switch in switches:
+            dpid = switch.ports[0].dpid
+            self._logger.info('Router %d', switch.ports[0].dpid)
+            self._logger.info('Ports %s',
+                              str([port.to_dict() for port in switch.ports]))
+            for port in switch.ports:
+                port_no = port.port_no
+                router_port = routers[dpid].ports[port_no]
+                if router_port.ip is None:
                     continue
-                self._logger.info("ip %s, nw %s, mask %d", port.ip, port.nw,
-                                  port.netmask)
+                self._logger.info("ip %s, nw %s, mask %d", router_port.ip,
+                                  router_port.nw, router_port.netmask)
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                  for src_dpid in dpids}
         via = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                for src_dpid in dpids}
         tmp_graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                      for src_dpid in dpids}
+        for dpid in dpids:
+            tmp_graph[dpid][dpid] = 0
         for link in links:
             dst_dpid = link.dst.dpid
             src_dpid = link.src.dpid
             graph[src_dpid][dst_dpid] = link
             via[src_dpid][dst_dpid] = link
             tmp_graph[src_dpid][dst_dpid] = 1
+        self._logger.info(str(graph))
 
         # Shortest path for each node
         for k in dpids:
@@ -46,7 +59,7 @@ class ShortestPathRouting(Routing):
                     if src == dst:
                         continue
                     src_k = tmp_graph[src][k]
-                    k_dst = tmp_graph[k][src]
+                    k_dst = tmp_graph[k][dst]
                     src_dst = tmp_graph[src][dst]
                     if (src_k is not None and k_dst is not None and
                             (src_dst is None or src_dst > src_k + k_dst)):
@@ -55,6 +68,7 @@ class ShortestPathRouting(Routing):
                             via[src][dst] = graph[src][k]
                         else:
                             via[src][dst] = via[src][k]
+        self._logger.info('tmp graph: %s', tmp_graph)
 
         # Routing entries
         for src in dpids:
@@ -126,5 +140,11 @@ class ShortestPathRouting(Routing):
                 # extra=self.sw_id)
         return gateway_flg
 
-
-
+    def on_port_status_change(self, msg, links, link_status, switches,
+                              routers):
+        new_links = []
+        for idx, link in enumerate(links):
+            if link_status[idx] == LINK_UP:
+                new_links.append(link)
+        self._logger.info('Rerouting...')
+        self._logger.info(self.routing(new_links, switches, routers))

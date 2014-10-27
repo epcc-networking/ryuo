@@ -5,8 +5,8 @@ from utils import nw_addr_aton, ip_addr_aton, ip_addr_ntoa
 
 
 class KFRouting(Routing):
-    def __init__(self):
-        super(KFRouting, self).__init__()
+    def __init__(self, app):
+        super(KFRouting, self).__init__(app)
         self._routing_tables = {}
 
     def register_router(self, router):
@@ -70,9 +70,8 @@ class KFRouting(Routing):
                         output_ports[-1] = router.dp.ofproto.OFPP_IN_PORT
                     src_macs = [link.src.hw_addr for link in sorted_candidates]
                     dst_macs = [link.dst.hw_addr for link in sorted_candidates]
-                    group_id = router.set_group(sorted_ports, src_macs,
-                                                dst_macs, sorted_ports,
-                                                output_ports)
+                    group_id = router.set_group(src_macs, dst_macs,
+                                                sorted_ports, output_ports)
                     for dst_str in dst_ips:
                         self._logger.info(
                             '%s from port %d to ports %s group_id %d',

@@ -39,3 +39,9 @@ ARP = arp.arp.__name__
 ICMP = icmp.icmp.__name__
 TCP = tcp.tcp.__name__
 UDP = udp.udp.__name__
+
+PORT_UP = 1
+PORT_DOWN = 0
+
+LINK_UP = 1
+LINK_DOWN = 0
