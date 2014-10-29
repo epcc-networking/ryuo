@@ -12,15 +12,15 @@ class KeepForwardingTestTopo(Topo):
     """
     Simple topology to test keep forwarding implementation
 
-               2.1     2.2   3.2   3.1
+               4.1     4.2   7.1   7.2
                ,----------s4---------,
                |                     |
-    1.2     1.1|4.1     4.2  7.1  7.2|8.1   8.2
+    1.2     1.1|3.1     3.2  6.1  6.2|8.1   8.2
     h1---------s1----------s3--------s5------h2
                |           |
                |           |
                '----s2-----'
-             5.1 5.2  6.1  6.2
+             2.1 2.2  5.1  5.2
     """
 
     def __init__(self):
@@ -33,10 +33,11 @@ class KeepForwardingTestTopo(Topo):
                           ip='10.0.8.2/24',
                           defaultRoute='via 10.0.8.1')
 
-        s = [self.addSwitch('s%d' % i + 1, protocols=OFP) for i in range(0, 5)]
+        s = [self.addSwitch('s%d' % (i + 1), protocols=OFP) for i in
+             range(0, 5)]
 
-        self.addLink(h1, s[1])
-        self.addLink(h2, s[5])
+        self.addLink(h1, s[0])
+        self.addLink(h2, s[4])
 
         graph = [[0, 1, 1, 1, 0],
                  [1, 0, 1, 0, 0],
