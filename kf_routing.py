@@ -110,6 +110,10 @@ class KFRouting(Routing):
     def update_mac(self, router, msg, headers):
         return False
 
+    def on_port_status_change(self, msg, links, link_status, switches,
+                              routers):
+        return
+
 
 class _RoutingTable(BaseRoutingTable):
     def __init__(self, logger):

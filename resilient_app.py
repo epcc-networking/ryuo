@@ -11,9 +11,9 @@ from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
 from constants import LINK_UP, LINK_DOWN, PORT_UP
+from kf_routing import KFRouting
 from rest_controller import RestController
 from router import Router
-from shortest_path_routing import ShortestPathRouting
 from utils import config_logger
 
 
@@ -32,7 +32,7 @@ class ResilientApp(app_manager.RyuApp):
         self._links = []
         self._switches = []
         self._link_status = []
-        self._routing = ShortestPathRouting(self)
+        self._routing = KFRouting(self)
 
         self.routers = {}
 
