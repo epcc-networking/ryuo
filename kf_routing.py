@@ -62,6 +62,28 @@ class KFRouting(Routing):
                                                                        degree,
                                                                        in_port)
                     )
+                    # remove ports with the same true sink as the in_port.
+                    self._logger.info('For in port %s, candidates: %s',
+                                      in_port,
+                                      str([link.to_dict() for link in
+                                           sorted_candidates]))
+                    in_port_link = [link for link in candidates if
+                                    link.src.port_no == in_port]
+                    if len(in_port_link) == 0:
+                        in_port_true_sink = src
+                    else:
+                        in_port_link = in_port_link[0]
+                        in_port_true_sink = self._find_true_sink(in_port_link,
+                                                                 graph, degree,
+                                                                 dst)
+                    sorted_candidates = [candidate for candidate in
+                                         sorted_candidates if
+                                         self._find_true_sink(candidate, graph,
+                                                              degree, dst) !=
+                                         in_port_true_sink or
+                                         candidate.src.port_no == in_port or
+                                         in_port_true_sink == dst]
+
                     sorted_ports = [link.src.port_no for link in
                                     sorted_candidates]
                     output_ports = list(sorted_ports)
@@ -86,6 +108,22 @@ class KFRouting(Routing):
                                                       in_port,
                                                       group_id)
         return ''
+
+    # Find the true sink of each out link
+    def _find_true_sink(self, link, graph, degree, ultimate_dst):
+        dst_dpid = link.dst.dpid
+        src_dpid = link.src.dpid
+        while degree[dst_dpid] <= 2 and dst_dpid != ultimate_dst:
+            self._logger.info('src: %d, dst: %d, degree: %d, udst: %d',
+                              src_dpid,
+                              dst_dpid, degree[dst_dpid], ultimate_dst)
+            for olink in graph[dst_dpid].values():
+                if olink is not None and olink.dst.dpid != src_dpid:
+                    src_dpid = dst_dpid
+                    dst_dpid = olink.dst.dpid
+                    break
+        return dst_dpid
+
 
     @staticmethod
     def _compare_link(l1, l2, level, degree, in_port):
