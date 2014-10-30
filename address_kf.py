@@ -1,6 +1,10 @@
 #!/usr/bin/env python2
 from subprocess import call
 
+from ryu.lib.dpid import dpid_to_str
+from ryu.lib.port_no import port_no_to_str
+
+
 IP = '127.0.0.1'
 
 if __name__ == '__main__':
@@ -16,9 +20,9 @@ if __name__ == '__main__':
                  ['10.0.6.1/24', 3, 3],
                  ['10.0.4.2/24', 4, 1],
                  ['10.0.7.1/24', 4, 2],
-                 ['10.0.6.2/24', 5, 1],
-                 ['10.0.7.2/24', 5, 2],
-                 ['10.0.8.1/24', 5, 3]]
+                 ['10.0.8.1/24', 5, 1],
+                 ['10.0.6.2/24', 5, 2],
+                 ['10.0.7.2/24', 5, 3]]
     for address in addresses:
         ip = address[0]
         router = address[1]
@@ -27,5 +31,6 @@ if __name__ == '__main__':
               '-X',
               'POST',
               '-d',
-              '\'{"address": "%s"}\'' % ip,
-              'http://%s:8080/router/%d/%d/address' % (IP, router, port)])
+              '{"address": "%s"}' % ip,
+              'http://%s:8080/router/%s/%s/address' % (
+                  IP, dpid_to_str(router), port_no_to_str(port))])

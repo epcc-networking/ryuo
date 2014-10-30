@@ -21,6 +21,8 @@ class KeepForwardingTestTopo(Topo):
                |           |
                '----s2-----'
              2.1 2.2  5.1  5.2
+    The correct route from h1 to h2 when link s3-s5 is down
+    is h1-s1-s3-s1-s4-s5-h2
     """
 
     def __init__(self):
@@ -46,7 +48,7 @@ class KeepForwardingTestTopo(Topo):
                  [0, 0, 1, 1, 0]]
 
         for i in range(0, 5):
-            for j in range(0, i):
+            for j in range(i + 1, 5):
                 if graph[i][j] == 1:
                     self.addLink(s[i], s[j])
 
