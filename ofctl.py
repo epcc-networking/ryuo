@@ -183,7 +183,7 @@ class OfCtl(object):
                       ip_total_length, ip.identification, ip.flags,
                       ip.offset, DEFAULT_TTL, inet.IPPROTO_ICMP, csum,
                       src_ip, ip.src)
-
+        self.logger.info('Sending from %s to %s', src_ip, ip.src)
         pkt = packet.Packet()
         pkt.add_protocol(e)
         pkt.add_protocol(i)

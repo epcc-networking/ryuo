@@ -261,6 +261,9 @@ class Router():
 
         in_port = self.ofctl.get_packetin_inport(msg)
         src_ip = self.ports[in_port].ip
+        if src_ip == srcip:
+            self._logger.info('Invalid packet from my self.')
+            return
         if src_ip is not None:
             self.ofctl.send_icmp(in_port, headers, ICMP_TIME_EXCEEDED,
                                  ICMP_TTL_EXPIRED_CODE,
@@ -297,6 +300,7 @@ class Router():
             self._logger.info('Send ARP request')
 
     def _packet_in_icmp_req(self, msg, headers):
+        self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
         in_port = self.ofctl.get_packetin_inport(msg)
         self.ofctl.send_icmp(in_port, headers, ICMP_ECHO_REPLY,
                              ICMP_ECHO_REPLY_CODE,

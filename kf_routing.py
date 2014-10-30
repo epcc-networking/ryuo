@@ -54,19 +54,11 @@ class KFRouting(Routing):
                          routers.get(src).ports.values() if
                          port.ip is not None]
                 candidates = [link for link in links if link.src.dpid == src]
+                candidate_true_sinks = {
+                    candidate: self._find_true_sink(candidate, graph, degree,
+                                                    dst) for candidate in
+                    candidates}
                 for in_port in ports:
-                    sorted_candidates = sorted(candidates,
-                                               cmp=lambda x, y:
-                                               KFRouting._compare_link(x, y,
-                                                                       level,
-                                                                       degree,
-                                                                       in_port)
-                    )
-                    # remove ports with the same true sink as the in_port.
-                    self._logger.info('For in port %s, candidates: %s',
-                                      in_port,
-                                      str([link.to_dict() for link in
-                                           sorted_candidates]))
                     in_port_link = [link for link in candidates if
                                     link.src.port_no == in_port]
                     if len(in_port_link) == 0:
@@ -76,13 +68,20 @@ class KFRouting(Routing):
                         in_port_true_sink = self._find_true_sink(in_port_link,
                                                                  graph, degree,
                                                                  dst)
-                    sorted_candidates = [candidate for candidate in
-                                         sorted_candidates if
-                                         self._find_true_sink(candidate, graph,
-                                                              degree, dst) !=
-                                         in_port_true_sink or
-                                         candidate.src.port_no == in_port or
-                                         in_port_true_sink == dst]
+                    sorted_candidates = sorted(candidates,
+                                               cmp=lambda x, y:
+                                               KFRouting._compare_link(x, y,
+                                                                       level,
+                                                                       degree,
+                                                                       in_port,
+                                                                       candidate_true_sinks,
+                                                                       in_port_true_sink)
+                    )
+                    # remove ports with the same true sink as the in_port.
+                    self._logger.info('For in port %s, candidates: %s',
+                                      in_port,
+                                      str([link.to_dict() for link in
+                                           sorted_candidates]))
 
                     sorted_ports = [link.src.port_no for link in
                                     sorted_candidates]
@@ -122,11 +121,16 @@ class KFRouting(Routing):
                     src_dpid = dst_dpid
                     dst_dpid = olink.dst.dpid
                     break
+        self._logger.info('True sink: %d', dst_dpid)
         return dst_dpid
 
+    @staticmethod
+    def _get_level(link, level):
+        return level[link.src.dpid] - level[link.dst.dpid]
 
     @staticmethod
-    def _compare_link(l1, l2, level, degree, in_port):
+    def _compare_link(l1, l2, level, degree, in_port, candidate_sinks,
+                      in_port_sink):
         if l1.src.port_no == in_port:
             return 1
         if l2.src.port_no == in_port:
@@ -134,6 +138,10 @@ class KFRouting(Routing):
         level_diff = level[l1.dst.dpid] - level[l2.dst.dpid]
         if level_diff != 0:
             return level_diff
+        if candidate_sinks[l2] == in_port_sink:
+            return -1
+        if candidate_sinks[l1] == in_port_sink:
+            return 1
         return degree[l2.dst.dpid] - degree[l1.dst.dpid]
 
     def get_routing_data_by_dst_ip(self, dpid, dst_ip):

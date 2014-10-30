@@ -8,9 +8,9 @@ from mininet.topo import Topo
 OFP = 'OpenFlow13'
 
 
-class KeepForwardingTestTopo(Topo):
+class KeepForwardingSmartDownlinkTestTopo(Topo):
     """
-    Simple topology to test keep forwarding implementation
+    Simple topology to test keep forwarding smart down-link selection
 
                4.1     4.2   7.1   7.2
                ,----------s4---------,
@@ -21,6 +21,8 @@ class KeepForwardingTestTopo(Topo):
                |           |
                '----s2-----'
              2.1 2.2  5.1  5.2
+
+    h1 to h2: h1-s2-s3-s5-h2
     The correct route from h1 to h2 when link s3-s5 is down
     is h1-s1-s3-s1-s4-s5-h2
     """
@@ -57,7 +59,7 @@ def run():
     OVSSwitch.setup()
     setLogLevel('debug')
 
-    net = Mininet(topo=KeepForwardingTestTopo(),
+    net = Mininet(topo=KeepForwardingSmartDownlinkTestTopo(),
                   switch=OVSSwitch,
                   controller=RemoteController)
     net.start()
