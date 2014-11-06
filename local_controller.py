@@ -29,6 +29,7 @@ class LocalController(app_manager.RyuApp):
         self._ns.register('local-%d' % dpid, uri)
         host_uri = self._ns.lookup('central-host')
         self.host = Pyro4.Proxy(host_uri)
+        self._logger.info('Central host uri: %s', host_uri)
         self.host.register(dpid)
         self._logger.info(uri)
         daemon.requestLoop()

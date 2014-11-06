@@ -14,6 +14,7 @@ class Host(object):
         super(Host, self).__init__()
         self._logger = logging.getLogger(self.__class__.__name__)
         config_logger(self._logger)
+        self._logger.info('Starting')
 
     @Pyro4.expose
     def register(self, id):
@@ -21,6 +22,7 @@ class Host(object):
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     host = Host()
     daemon = Pyro4.Daemon()
     uri = daemon.register(host)
