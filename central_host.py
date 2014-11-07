@@ -3,6 +3,7 @@ import logging
 
 import Pyro4
 
+from config import CENTRAL_HOST_NAME, LOG_LEVEL
 from utils import config_logger
 
 
@@ -22,11 +23,11 @@ class Host(object):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=LOG_LEVEL)
     host = Host()
     daemon = Pyro4.Daemon()
     uri = daemon.register(host)
     ns = Pyro4.locateNS()
-    ns.register('central-host', uri)
+    ns.register(CENTRAL_HOST_NAME, uri)
     daemon.requestLoop()
 
