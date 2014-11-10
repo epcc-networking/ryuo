@@ -17,20 +17,31 @@ from config import ARP_EXPIRE_SECOND
 from constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
-    PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, ETHERNET, \
-    MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING
+    PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
+    MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, PORT_UP
 from local_controller import LocalController
-from resilient_router import ARP, ip_addr_ntoa, ip_addr_aton
+from resilient_router import ARP, ip_addr_ntoa
 from utils import mask_ntob, nw_addr_aton, ipv4_apply_mask
 
 
 class RoutingLocal(LocalController):
     def __init__(self, *args, **kwargs):
         super(RoutingLocal, self).__init__(*args, **kwargs)
-        self._group_id = 0
         self.arp_table = _ArpTable()
+        self.groups = _GroupTable()
+        self.routing_table = _RoutingTable(self._logger)
         self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
+
+    @Pyro4.expose
+    def add_route(self, dst_ip, in_port, output_ports):
+        group = self.groups.add_entry(output_ports)
+        self._set_group(in_port, output_ports)
+        route = self.routing_table.add_entry(dst_ip=dst_ip,
+                                             in_port=in_port,
+                                             out_group=group.id)
+        self._install_routing_entry(route)
+
 
     @Pyro4.expose
     def set_port_address(self, ip_str, port_no):
@@ -81,9 +92,10 @@ class RoutingLocal(LocalController):
                 dst_mac = mac_lib.BROADCAST_STR
                 arp_target_mac = mac_lib.DONTCARE_STR
                 inport = self.ofctl.dp.ofproto.OFPP_CONTROLLER
-                outport = send_port.port_no
+                output_port = send_port.port_no
                 self.ofctl.send_arp(ARP_REQUEST, src_mac, dst_mac, src_ip,
-                                    dst_ip, arp_target_mac, inport, outport)
+                                    dst_ip, arp_target_mac, inport,
+                                    output_port)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in(self, ev):
@@ -105,8 +117,8 @@ class RoutingLocal(LocalController):
             return self._packet_in_to_node(msg, headers)
 
     # @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
-    #def port_status_change(self, ev):
-    #    pass
+    # def port_status_change(self, ev):
+    # pass
 
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
@@ -128,25 +140,27 @@ class RoutingLocal(LocalController):
         self.ofctl.set_routing_flow(0,
                                     priority,
                                     route.out_port,
-                                    src_mac=route.src_mac,
-                                    dst_mac=route.gateway_mac,
                                     nw_dst=route.dst_ip,
                                     dst_mask=route.netmask,
                                     dec_ttl=True,
                                     in_port=route.in_port,
                                     out_group=route.out_group)
 
-    def _set_group(self, src_macs, dst_macs, watch_ports, out_ports):
+    def _set_group(self, in_port, output_ports):
+        watch_ports = output_ports
+        output_ports = [
+            port if port != in_port else self.dp.ofproto.OFPP_IN_PORT for port
+            in output_ports]
         self.ofctl.set_group(self._group_id,
                              watch_ports,
-                             out_ports,
+                             output_ports,
                              src_macs,
                              dst_macs)
-        self._group_id += 1
 
     def _register(self, dp):
         super(RoutingLocal, self)._register(dp)
-        self._group_id = 0
+        self.groups.clear()
+        self.routing_table.clear()
 
     def _unregister(self):
         super(RoutingLocal, self)._unregister()
@@ -278,7 +292,6 @@ class RoutingLocal(LocalController):
                                                  suspended_packet.dst_ip)
 
     def _get_send_port_ip(self, headers):
-        src_mac = headers[ETHERNET].src
         if IPV4 in headers:
             src_ip = headers[IPV4].src
         elif ARP in headers:
@@ -290,13 +303,20 @@ class RoutingLocal(LocalController):
         if port is not None:
             return port.ip
         else:
-            route = self.get_routing_data_by_gateway_mac(self.dp.id,
-                                                         src_mac)
-            if route is not None:
-                port = self.ports.get(route.out_port)
-                if port is not None:
-                    return port.ip
+            output_port = self._get_output_port(src_ip)
+            if output_port is not None:
+                return output_port.ip
         self._logger.info('Receive packet from unknown IP %s', src_ip)
+
+    def _get_output_port(self, dst_ip):
+        route = self.routing_table.get_data_by_dst_ip(dst_ip)
+        if route is None:
+            return None
+        group = self.groups[route.out_group]
+        for port_no in group.output_ports:
+            if self.ports[port_no].status == PORT_UP:
+                return self.ports[port_no]
+        return None
 
 
 class _ArpEntry(object):
@@ -364,7 +384,7 @@ class _SuspendPacketList(list):
 
     def add(self, in_port, header_list, data):
         suspend_pkt = _SuspendPacket(in_port, header_list, data,
-                                    self.wait_arp_reply_timer)
+                                     self.wait_arp_reply_timer)
         self.append(suspend_pkt)
 
     def delete(self, pkt=None, del_addr=None):
@@ -401,10 +421,9 @@ class _SuspendPacket(object):
 
 
 class _Group(object):
-    def __init__(self, group_id, watch_ports, output_ports):
+    def __init__(self, group_id, output_ports):
         super(_Group, self).__init__()
         self.id = group_id
-        self.watch_ports = watch_ports
         self.output_ports = output_ports
 
 
@@ -416,22 +435,21 @@ class _GroupTable(dict):
     def clear(self):
         super(_GroupTable, self).clear()
 
-    def add_entry(self, watch_ports, output_ports):
-        self[self.group_id] = _Group(self.group_id, watch_ports, output_ports)
+    def add_entry(self, output_ports):
+        group = _Group(self.group_id, output_ports)
+        self[self.group_id] = group
         self.group_id += 1
-        return self.group_id - 1
+        return group
 
 
 class _Route(object):
-    def __init__(self, route_id, dst_ip, netmask, gateway_ip, src_mac,
-                 gateway_mac, in_port, out_group):
+    def __init__(self, route_id, dst_ip, netmask, src_mac,
+                 in_port, out_group):
         super(_Route, self).__init__()
         self.route_id = route_id
         self.dst_ip = dst_ip
         self.netmask = netmask
-        self.gateway_ip = gateway_ip
         self.src_mac = src_mac
-        self.gateway_mac = gateway_mac
         self.in_port = in_port
         self.out_group = out_group
 
@@ -442,10 +460,8 @@ class _RoutingTable(dict):
         self._logger = logger
         self.route_id = 0
 
-    def add(self, dst_ip, gateway_ip, src_mac, gateway_mac,
-            in_port, out_group):
+    def add_entry(self, dst_ip, src_mac, in_port, out_group):
         dst, netmask, dummy = nw_addr_aton(dst_ip)
-        gateway_ip = ip_addr_aton(gateway_ip)
         ip_str = ip_addr_ntoa(dst)
         key = '%s/%d' % (ip_str, netmask)
         if key in self:
@@ -453,9 +469,7 @@ class _RoutingTable(dict):
         routing_data = _Route(route_id=self.route_id,
                               dst_ip=dst,
                               netmask=netmask,
-                              gateway_ip=gateway_ip,
                               src_mac=src_mac,
-                              gateway_mac=gateway_mac,
                               in_port=in_port,
                               out_group=out_group)
         self[key] = routing_data
@@ -479,9 +493,3 @@ class _RoutingTable(dict):
                     get_route = route
                     mask = route.netmask
         return get_route
-
-    def get_data_by_gateway_mac(self, gateway_mac):
-        for route in self.values():
-            if gateway_mac == route.gateway_mac:
-                return route
-        return None

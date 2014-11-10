@@ -11,6 +11,7 @@ from ryu.ofproto import ofproto_v1_2
 
 from config import CENTRAL_HOST_NAME, LOCAL_HOST_NAME
 from constants import PORT_UP, PORT_DOWN
+from local_common.port import Port
 from ofctl import OfCtl
 from utils import config_logger, ipv4_apply_mask
 
@@ -118,23 +119,3 @@ class Ports(dict):
         for port in self.values():
             if port.mac == mac:
                 return port
-
-
-class Port(object):
-    def __init__(self, port_no, mac):
-        super(Port, self).__init__()
-        self.port_no = port_no
-        self.mac = mac
-        self.ip = None
-        self.nw = None
-        self.netmask = None
-        self.links = {}
-        self.status = PORT_UP
-
-    def set_ip(self, nw, mask, ip):
-        self.nw = nw
-        self.netmask = mask
-        self.ip = ip
-
-    def add_link(self, link):
-        self.links[link.dst.hw_addr] = link
