@@ -7,7 +7,8 @@ from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls
 from ryu.lib.packet import packet
 from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
 from ryu.lib.packet.icmp import icmp, ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
-    ICMP_PORT_UNREACH_CODE, ICMP_DEST_UNREACH
+    ICMP_PORT_UNREACH_CODE, ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED, \
+    ICMP_TTL_EXPIRED_CODE
 from ryu.ofproto import ether
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
@@ -19,7 +20,7 @@ from constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, ETHERNET, \
     MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING
 from local_controller import LocalController
-from resilient_router import ARP
+from resilient_router import ARP, ip_addr_ntoa, ip_addr_aton
 from utils import mask_ntob, nw_addr_aton, ipv4_apply_mask
 
 
@@ -27,8 +28,8 @@ class RoutingLocal(LocalController):
     def __init__(self, *args, **kwargs):
         super(RoutingLocal, self).__init__(*args, **kwargs)
         self._group_id = 0
-        self.arp_table = ArpTable()
-        self.packet_buffer = SuspendPacketList(
+        self.arp_table = _ArpTable()
+        self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
 
     @Pyro4.expose
@@ -48,18 +49,18 @@ class RoutingLocal(LocalController):
         self.ports[port_no].set_ip(nw, mask, ip)
         self._logger.info('Setting IP %s/%d of %s', ip, mask, nw)
 
-        priority, dummy = get_priority(PRIORITY_MAC_LEARNING)
+        priority, dummy = _get_priority(PRIORITY_MAC_LEARNING)
         self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=nw, dst_mask=mask)
         self._logger.info('Set MAC learning for %s', ip)
         # IP handling
-        priority, dummy = get_priority(PRIORITY_IP_HANDLING)
+        priority, dummy = _get_priority(PRIORITY_IP_HANDLING)
         self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=ip)
         self._logger.info('Set IP handling for %s', ip)
         # L2 switching
         out_port = self.ofctl.dp.ofproto.OFPP_NORMAL
-        priority, dummy = get_priority(PRIORITY_L2_SWITCHING)
+        priority, dummy = _get_priority(PRIORITY_L2_SWITCHING)
         self.ofctl.set_routing_flow(
             0, priority, out_port,
             nw_src=nw, src_mask=mask,
@@ -103,9 +104,9 @@ class RoutingLocal(LocalController):
                     return self._packet_in_tcp_udp(msg, headers)
             return self._packet_in_to_node(msg, headers)
 
-    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
-    def port_status_change(self, ev):
-        pass
+    # @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
+    #def port_status_change(self, ev):
+    #    pass
 
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
@@ -113,17 +114,17 @@ class RoutingLocal(LocalController):
     def init_switch(self):
         cookie = 0
         self.ofctl.set_sw_config_for_ttl()
-        priority, dummy = get_priority(PRIORITY_ARP_HANDLING)
+        priority, dummy = _get_priority(PRIORITY_ARP_HANDLING)
         self.ofctl.set_packet_in_flow(cookie, priority,
                                       dl_type=ether.ETH_TYPE_ARP)
-        priority, dummy = get_priority(PRIORITY_DEFAULT_ROUTING)
+        priority, dummy = _get_priority(PRIORITY_DEFAULT_ROUTING)
         self.ofctl.set_routing_flow(cookie, priority, None)
         self.ofctl.set_routing_flow_v6(cookie, priority, None)
-        priority, dummy = get_priority(PRIORITY_NORMAL)
+        priority, dummy = _get_priority(PRIORITY_NORMAL)
         self.ofctl.set_normal_flow(cookie, priority)
 
     def _install_routing_entry(self, route):
-        priority, dummy = get_priority(PRIORITY_TYPE_ROUTE, route=route)
+        priority, dummy = _get_priority(PRIORITY_TYPE_ROUTE, route=route)
         self.ofctl.set_routing_flow(0,
                                     priority,
                                     route.out_port,
@@ -190,7 +191,7 @@ class RoutingLocal(LocalController):
         dst_mac = self.ports[out_port].mac
         src_ip = headers[ARP].src_ip
         self.arp_table.add_entry(src_ip, src_mac)
-        priority, dummy = get_priority(PRIORITY_IMPLICIT_ROUTING)
+        priority, dummy = _get_priority(PRIORITY_IMPLICIT_ROUTING)
         self.ofctl.set_routing_flow(0,
                                     priority,
                                     out_port,
@@ -202,7 +203,24 @@ class RoutingLocal(LocalController):
         self._logger.info('Set implicit routing flow to %s', src_ip)
 
     def _packet_in_invalid_ttl(self, msg, headers):
-        pass
+        src_ip = headers[IPV4].src
+        self._logger('Received packet with invalid ttl from %s.', src_ip)
+        in_port = self.ofctl.get_packetin_inport(msg)
+        in_ip = self.ports[in_port].ip
+        if src_ip in self.get_ips():
+            self._logger.warning(
+                'Receive packet with invalid ttl from myself.')
+            return
+        if in_ip is not None:
+            self.ofctl.send_icmp(in_port,
+                                 headers,
+                                 ICMP_TIME_EXCEEDED,
+                                 ICMP_TTL_EXPIRED_CODE,
+                                 msg_data=msg.data,
+                                 src_ip=in_ip)
+            self._logger.info('Send ICMP time exceeded from %s to %s.',
+                              in_ip,
+                              src_ip)
 
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
@@ -281,9 +299,9 @@ class RoutingLocal(LocalController):
         self._logger.info('Receive packet from unknown IP %s', src_ip)
 
 
-class ArpEntry(object):
+class _ArpEntry(object):
     def __init__(self, ip, mac):
-        super(ArpEntry, self).__init__()
+        super(_ArpEntry, self).__init__()
         self.ip = ip
         self.mac = mac
         self.refreshed_at = time.time()
@@ -295,12 +313,12 @@ class ArpEntry(object):
         self.refreshed_at = time.time()
 
 
-class ArpTable(dict):
+class _ArpTable(dict):
     def __init__(self):
-        super(ArpTable, self).__init__()
+        super(_ArpTable, self).__init__()
 
     def __getitem__(self, item):
-        entry = super(ArpTable, self).__getitem__(item)
+        entry = super(_ArpTable, self).__getitem__(item)
         if entry is not None and not entry.is_expired():
             return entry
 
@@ -312,10 +330,10 @@ class ArpTable(dict):
         return d
 
     def add_entry(self, ip, mac):
-        self[ip] = ArpEntry(ip, mac)
+        self[ip] = _ArpEntry(ip, mac)
 
 
-def get_priority(priority_type, vid=0, route=None):
+def _get_priority(priority_type, vid=0, route=None):
     log_msg = None
     priority = priority_type
 
@@ -339,13 +357,13 @@ def get_priority(priority_type, vid=0, route=None):
     return priority, log_msg
 
 
-class SuspendPacketList(list):
+class _SuspendPacketList(list):
     def __init__(self, timeout_function):
-        super(SuspendPacketList, self).__init__()
+        super(_SuspendPacketList, self).__init__()
         self.timeout_function = timeout_function
 
     def add(self, in_port, header_list, data):
-        suspend_pkt = SuspendPacket(in_port, header_list, data,
+        suspend_pkt = _SuspendPacket(in_port, header_list, data,
                                     self.wait_arp_reply_timer)
         self.append(suspend_pkt)
 
@@ -371,12 +389,99 @@ class SuspendPacketList(list):
             self.delete(pkt=suspend_pkt)
 
 
-class SuspendPacket(object):
+class _SuspendPacket(object):
     def __init__(self, in_port, header_list, data, timer):
-        super(SuspendPacket, self).__init__()
+        super(_SuspendPacket, self).__init__()
         self.in_port = in_port
         self.dst_ip = header_list[IPV4].dst
         self.header_list = header_list
         self.data = data
         # Start ARP reply wait timer.
         self.wait_thread = hub.spawn(timer, self)
+
+
+class _Group(object):
+    def __init__(self, group_id, watch_ports, output_ports):
+        super(_Group, self).__init__()
+        self.id = group_id
+        self.watch_ports = watch_ports
+        self.output_ports = output_ports
+
+
+class _GroupTable(dict):
+    def __init__(self):
+        super(_GroupTable, self).__init__()
+        self.group_id = 0
+
+    def clear(self):
+        super(_GroupTable, self).clear()
+
+    def add_entry(self, watch_ports, output_ports):
+        self[self.group_id] = _Group(self.group_id, watch_ports, output_ports)
+        self.group_id += 1
+        return self.group_id - 1
+
+
+class _Route(object):
+    def __init__(self, route_id, dst_ip, netmask, gateway_ip, src_mac,
+                 gateway_mac, in_port, out_group):
+        super(_Route, self).__init__()
+        self.route_id = route_id
+        self.dst_ip = dst_ip
+        self.netmask = netmask
+        self.gateway_ip = gateway_ip
+        self.src_mac = src_mac
+        self.gateway_mac = gateway_mac
+        self.in_port = in_port
+        self.out_group = out_group
+
+
+class _RoutingTable(dict):
+    def __init__(self, logger):
+        super(_RoutingTable, self).__init__()
+        self._logger = logger
+        self.route_id = 0
+
+    def add(self, dst_ip, gateway_ip, src_mac, gateway_mac,
+            in_port, out_group):
+        dst, netmask, dummy = nw_addr_aton(dst_ip)
+        gateway_ip = ip_addr_aton(gateway_ip)
+        ip_str = ip_addr_ntoa(dst)
+        key = '%s/%d' % (ip_str, netmask)
+        if key in self:
+            self._logger.warning('Routing entry overlapped')
+        routing_data = _Route(route_id=self.route_id,
+                              dst_ip=dst,
+                              netmask=netmask,
+                              gateway_ip=gateway_ip,
+                              src_mac=src_mac,
+                              gateway_mac=gateway_mac,
+                              in_port=in_port,
+                              out_group=out_group)
+        self[key] = routing_data
+        self.route_id += 1
+        return routing_data
+
+    def delete(self, route_id):
+        for key, value in self.items():
+            if value.route_id == route_id:
+                del self[key]
+
+    def get_gateways(self):
+        return [route.gateway_ip for route in self.values()]
+
+    def get_data_by_dst_ip(self, dst_ip):
+        get_route = None
+        mask = 0
+        for route in self.values():
+            if ipv4_apply_mask(dst_ip, route.netmask) == route.dst_ip:
+                if mask < route.netmask:
+                    get_route = route
+                    mask = route.netmask
+        return get_route
+
+    def get_data_by_gateway_mac(self, gateway_mac):
+        for route in self.values():
+            if gateway_mac == route.gateway_mac:
+                return route
+        return None
