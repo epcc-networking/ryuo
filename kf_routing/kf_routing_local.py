@@ -19,14 +19,14 @@ from constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, PORT_UP
-from local_controller import LocalController
+from common.local_controller import LocalController
 from resilient_router import ARP, ip_addr_ntoa
 from utils import mask_ntob, nw_addr_aton, ipv4_apply_mask
 
 
-class RoutingLocal(LocalController):
+class KFRoutingLocal(LocalController):
     def __init__(self, *args, **kwargs):
-        super(RoutingLocal, self).__init__(*args, **kwargs)
+        super(KFRoutingLocal, self).__init__(*args, **kwargs)
         self.arp_table = _ArpTable()
         self.groups = _GroupTable()
         self.routing_table = _RoutingTable(self._logger)
@@ -151,19 +151,19 @@ class RoutingLocal(LocalController):
         output_ports = [
             port if port != in_port else self.dp.ofproto.OFPP_IN_PORT for port
             in output_ports]
-        self.ofctl.set_group(self._group_id,
-                             watch_ports,
-                             output_ports,
-                             src_macs,
-                             dst_macs)
+        # self.ofctl.set_group(self._group_id,
+        #                     watch_ports,
+        #                     output_ports,
+        #                     src_macs,
+        #                     dst_macs)
 
     def _register(self, dp):
-        super(RoutingLocal, self)._register(dp)
+        super(KFRoutingLocal, self)._register(dp)
         self.groups.clear()
         self.routing_table.clear()
 
     def _unregister(self):
-        super(RoutingLocal, self)._unregister()
+        super(KFRoutingLocal, self)._unregister()
         self.arp_table.clear()
 
     def _packet_in_arp(self, msg, headers):

@@ -7,11 +7,11 @@ from ryu.controller import dpset
 from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
-from ryu.ofproto import ofproto_v1_2
+from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
 
 from config import CENTRAL_HOST_NAME, LOCAL_HOST_NAME
 from constants import PORT_UP, PORT_DOWN
-from local_common.port import Port
+from common.port import Port
 from ofctl import OfCtl
 from utils import config_logger, ipv4_apply_mask
 
@@ -20,7 +20,8 @@ Pyro4.config.REQUIRE_EXPOSE = True
 
 
 class LocalController(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_2.OFP_VERSION]
+    OFP_VERSIONS = [ofproto_v1_2.OFP_VERSION,
+                    ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super(LocalController, self).__init__(*args, **kwargs)
