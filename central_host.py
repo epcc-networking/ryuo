@@ -18,8 +18,8 @@ class Host(object):
         self._logger.info('Starting')
 
     @Pyro4.expose
-    def register(self, id):
-        self._logger.info('Local %d comes up', id)
+    def register(self, name):
+        self._logger.info('%s comes up', name)
 
 
 if __name__ == '__main__':

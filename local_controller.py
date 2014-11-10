@@ -30,11 +30,12 @@ class LocalController(app_manager.RyuApp):
         self._rpc_daemon = Pyro4.Daemon()
         uri = self._rpc_daemon.register(self)
         self._ns = Pyro4.locateNS()
-        self._ns.register(LOCAL_HOST_NAME % dpid, uri)
+        self.name = LOCAL_HOST_NAME % dpid
+        self._ns.register(self.name, uri)
         host_uri = self._ns.lookup(CENTRAL_HOST_NAME)
         self.host = Pyro4.Proxy(host_uri)
         self._logger.info('Central host uri: %s', host_uri)
-        self.host.register(dpid)
+        self.host.register(self.name)
         self._rpc_daemon.requestLoop()
 
     def _register(self, dp):
