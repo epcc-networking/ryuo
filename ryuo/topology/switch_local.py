@@ -1,14 +1,16 @@
 import logging
+import time
 
 from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
+from ryu.lib.mac import DONTCARE_STR
 from ryu.ofproto import ofproto_v1_2
 from ryu.topology import event
 from ryu.topology.switches import LinkState, Link, PortDataState, PortState, \
     LLDPPacket, Port
 
-from common.local_controller import LocalController
+from ryuo.common.local_controller import LocalController
 
 
 class SwitchLocal(LocalController):
@@ -16,9 +18,18 @@ class SwitchLocal(LocalController):
     Ryu topology module ported to Local Controller
     """
     _EVENTS = {event.EventLinkAdd,
-               event.EventLinkDelete}
+               event.EventLinkDelete,
+               event.EventPortAdd,
+               event.EventPortDelete,
+               event.EventPortModify}
 
     DEFAULT_TTL = 64
+    LLDP_PACKET_LEN = len(LLDPPacket.lldp_packet(0, 0, DONTCARE_STR, 0))
+    LLDP_SEND_GUARD = .05
+    LLDP_SEND_PERIOD_PER_PORT = .9
+    TIMEOUT_CHECK_PERIOD = 5.
+    LINK_TIMEOUT = TIMEOUT_CHECK_PERIOD * 2
+    LINK_LLDP_DROP = 5
 
     def __init__(self, *args, **kwargs):
         super(SwitchLocal, self).__init__(*args, **kwargs)
@@ -157,12 +168,68 @@ class SwitchLocal(LocalController):
         else:
             self._logger.error('Cannot send LLDP packet, unsupported version.')
 
-
     def lldp_loop(self):
-        pass
+        while self.is_active:
+            self.lldp_event.clear()
+            now = time.time()
+            timeout = None
+            ports_now = []
+            ports = []
+            for (key, data) in self.ports.items():
+                if data.timestamp is None:
+                    ports_now.append(key)
+                    continue
+                expire = data.timestamp + self.LLDP_SEND_PERIOD_PER_PORT
+                if expire <= now:
+                    ports.append(key)
+                    continue
+                timeout = expire - now
+            for port in ports_now:
+                self.send_lldp_packet(port)
+            for port in ports:
+                self.send_lldp_packet(port)
+                hub.sleep(self.LLDP_SEND_GUARD)
+
+            if timeout is not None and ports:
+                timeout = 0
+            self.lldp_event.wait(timeout=timeout)
 
     def link_loop(self):
-        pass
+        while self.is_active:
+            self.link_event.clear()
+            now = time.time()
+            deleted = []
+            for (link, timestamp) in self.links.items():
+                if timestamp + self.LINK_TIMEOUT < now:
+                    src = link.src
+                    if src in self.ports:
+                        port_data = self.ports.get_port(src)
+                        if port_data.lldp_dropped() > self.LINK_LLDP_DROP:
+                            deleted.append(link)
+            for link in deleted:
+                self.links.link_down(link)
+                self.send_event_to_observers(event.EventLinkDelete(link))
+                dst = link.dst
+                rev_link = Link(dst, link.src)
+                if rev_link not in deleted:
+                    expire = now - self.LINK_TIMEOUT
+                    self.links.rev_link_set_timestamp(rev_link, expire)
+                    if dst in self.ports:
+                        self.ports.move_front(dst)
+                        self.lldp_event.set()
+            self.link_event.wait(timeout=self.TIMEOUT_CHECK_PERIOD)
+
+    @set_ev_cls(event.EventLinkRequest)
+    def link_request_handler(self, req):
+        # LOG.debug(req)
+        dpid = req.dpid
+
+        if dpid is None:
+            links = self.links
+        else:
+            links = [link for link in self.links if link.src.dpid == dpid]
+        rep = event.EventLinkReply(req.src, dpid, links)
+        self.reply_to_request(req, rep)
 
     def close(self):
         self.is_active = False

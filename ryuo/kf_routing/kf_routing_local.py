@@ -19,7 +19,7 @@ from constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, PORT_UP
-from common.local_controller import LocalController
+from ryuo.common.local_controller import LocalController
 from resilient_router import ARP, ip_addr_ntoa
 from utils import mask_ntob, nw_addr_aton, ipv4_apply_mask
 

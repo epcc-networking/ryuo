@@ -11,7 +11,7 @@ from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
 from constants import LINK_UP, LINK_DOWN, PORT_UP
-from kf_routing import KFRouting
+from ryuo.kf_routing import KFRouting
 from rest_controller import RestController
 from router import Router
 from utils import config_logger

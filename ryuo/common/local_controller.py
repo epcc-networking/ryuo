@@ -11,7 +11,7 @@ from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
 
 from config import CENTRAL_HOST_NAME, LOCAL_HOST_NAME
 from constants import PORT_UP, PORT_DOWN
-from common.port import Port
+from ryuo.common.port import Port
 from ofctl import OfCtl
 from utils import config_logger, ipv4_apply_mask
 
