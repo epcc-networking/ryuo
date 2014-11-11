@@ -9,7 +9,7 @@ from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
 
-from config import CENTRAL_HOST_NAME, LOCAL_HOST_NAME
+from ryuo.config import CENTRAL_HOST_NAME
 from constants import PORT_UP, PORT_DOWN
 from ryuo.common.port import Port
 from ofctl import OfCtl
@@ -27,17 +27,18 @@ class LocalController(app_manager.RyuApp):
         super(LocalController, self).__init__(*args, **kwargs)
         self._setup_logger()
         self._rpc_daemon = None
+        self._rpc_thread = None
 
     def _run_rpc_daemon(self, dpid):
         self._rpc_daemon = Pyro4.Daemon()
-        uri = self._rpc_daemon.register(self)
+        self.uri = self._rpc_daemon.register(self)
         self._ns = Pyro4.locateNS()
-        self.name = LOCAL_HOST_NAME % dpid
-        self._ns.register(self.name, uri)
+        self.name = "%s-%d" % (self.__class__.__name__, dpid)
+        self._ns.register(self.name, self.uri)
         host_uri = self._ns.lookup(CENTRAL_HOST_NAME)
         self.host = Pyro4.Proxy(host_uri)
         self._logger.info('Central host uri: %s', host_uri)
-        self.host.register(self.name)
+        self.host.register(self.name, self.uri)
         self._rpc_daemon.requestLoop()
 
     def _register(self, dp):
@@ -46,12 +47,14 @@ class LocalController(app_manager.RyuApp):
         self.ports = Ports(dp.ports)
         self.ofctl = OfCtl(dp, self._logger)
         self.init_switch()
-        hub.spawn(self._run_rpc_daemon, dp.id)
+        self._rpc_thread = hub.spawn(self._run_rpc_daemon, dp.id)
+        self.threads.append(self._rpc_thread)
         self._logger.info('Ready to work')
 
     def _unregister(self):
         if self._rpc_daemon is not None:
-            self._rpc_daemon.close()
+            self._rpc_daemon.shutdown()
+            hub.joinall([self._rpc_thread])
             self.ofctl = None
             self._rpc_daemon = None
             self.dp = None

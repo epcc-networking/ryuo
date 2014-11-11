@@ -13,7 +13,7 @@ from ryu.ofproto import ether
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
 
-from config import ARP_EXPIRE_SECOND
+from ryuo.config import ARP_EXPIRE_SECOND
 from constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \

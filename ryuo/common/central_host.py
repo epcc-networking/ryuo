@@ -3,7 +3,7 @@ import logging
 
 import Pyro4
 
-from config import CENTRAL_HOST_NAME, LOG_LEVEL
+from ryuo.config import CENTRAL_HOST_NAME, LOG_LEVEL
 from utils import config_logger
 
 
@@ -18,8 +18,8 @@ class Host(object):
         self._logger.info('Starting')
 
     @Pyro4.expose
-    def register(self, name):
-        self._logger.info('%s comes up', name)
+    def register(self, name, uri):
+        self._logger.info('%s comes up, with uri: %s', name, uri)
 
 
 if __name__ == '__main__':
