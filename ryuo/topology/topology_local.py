@@ -1,6 +1,8 @@
 import logging
 import time
 
+import Pyro4
+
 from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
@@ -13,7 +15,7 @@ from ryu.topology.switches import LinkState, Link, PortDataState, PortState, \
 from ryuo.common.local_controller import LocalController
 
 
-class SwitchLocal(LocalController):
+class TopologyLocal(LocalController):
     """
     Ryu topology module ported to Local Controller
     """
@@ -32,7 +34,7 @@ class SwitchLocal(LocalController):
     LINK_LLDP_DROP = 5
 
     def __init__(self, *args, **kwargs):
-        super(SwitchLocal, self).__init__(*args, **kwargs)
+        super(TopologyLocal, self).__init__(*args, **kwargs)
         self._logger = logging.getLogger(self.__class__.__name__)
         self.is_active = True
         self.explicit_drop = True
@@ -45,12 +47,12 @@ class SwitchLocal(LocalController):
         self.threads.append(hub.spawn(self.link_loop))
 
     def _register(self, dp):
-        super(SwitchLocal, self)._register(dp)
+        super(TopologyLocal, self)._register(dp)
         for port in dp.ports.values():
             self.port_state.add(port.port_no, port)
 
     def _unregister(self):
-        super(SwitchLocal, self)._unregister()
+        super(TopologyLocal, self)._unregister()
         self.port_state.clear()
 
     def _get_port(self, port_no):
@@ -230,6 +232,10 @@ class SwitchLocal(LocalController):
             links = [link for link in self.links if link.src.dpid == dpid]
         rep = event.EventLinkReply(req.src, dpid, links)
         self.reply_to_request(req, rep)
+
+    @Pyro4.expose
+    def get_links(self):
+        return self.links
 
     def close(self):
         self.is_active = False
