@@ -4,7 +4,6 @@ import logging
 import Pyro4
 from ryu.base import app_manager
 from ryu.lib import hub
-
 from utils import config_logger
 
 
@@ -33,11 +32,18 @@ class Ryuo(app_manager.RyuApp):
                           name, uri)
         self.local_apps[dpid] = Pyro4.Proxy(uri)
 
+    @Pyro4.expose
+    def unregister(self, dpid, name, uri):
+        self._logger.info('DPID: %d, app %s with uri %s leaves.')
+        del self.local_apps[dpid]
+
     def _run_rpc_daemon(self):
         self._rpc_daemon = Pyro4.Daemon()
         self.uri = self._rpc_daemon.register(self)
         ns = Pyro4.locateNS()
         ns.register(self.name, self.uri)
+        self._logger.info('Ryuo running with name %s and uri %s.', self.name,
+                          self.uri)
         self._rpc_daemon.requestLoop()
 
     def close(self):

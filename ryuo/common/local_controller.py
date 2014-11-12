@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 import logging
 
 import Pyro4
@@ -8,12 +7,12 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
+from utils import config_logger, ipv4_apply_mask
 
 from ryuo.config import CENTRAL_HOST_NAME
 from constants import PORT_UP, PORT_DOWN
 from ryuo.common.port import Port
 from ofctl import OfCtl
-from utils import config_logger, ipv4_apply_mask
 
 
 Pyro4.config.REQUIRE_EXPOSE = True
@@ -29,6 +28,7 @@ class LocalController(app_manager.RyuApp):
         self._rpc_daemon = None
         self._rpc_thread = None
         self.uri = None
+        self.ryuo = None
 
     def _run_rpc_daemon(self, dpid):
         self._rpc_daemon = Pyro4.Daemon()
@@ -37,9 +37,9 @@ class LocalController(app_manager.RyuApp):
         self.name = "%s-%d" % (self.__class__.__name__, dpid)
         self._ns.register(self.name, self.uri)
         host_uri = self._ns.lookup(CENTRAL_HOST_NAME)
-        self.host = Pyro4.Proxy(host_uri)
+        self.ryuo = Pyro4.Proxy(host_uri)
         self._logger.info('Central host uri: %s', host_uri)
-        self.host.register(dpid, self.__class__.__name__, self.uri)
+        self.ryuo.register(dpid, self.__class__.__name__, self.uri)
         self._rpc_daemon.requestLoop()
 
     def _register(self, dp):
@@ -54,6 +54,7 @@ class LocalController(app_manager.RyuApp):
 
     def _unregister(self):
         if self._rpc_daemon is not None:
+            self.ryuo.unregister(self.dp.id, self.name, self.uri)
             self._rpc_daemon.shutdown()
             hub.joinall([self._rpc_thread])
             self.ofctl = None
