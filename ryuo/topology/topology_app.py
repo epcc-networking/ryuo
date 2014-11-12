@@ -39,17 +39,12 @@ class TopologyApp(Ryuo):
     def link_request_handler(self, req):
         dpid = req.dpid
         if dpid is None:
-            links = [link for link in self.links[dpid] for dpid in
+            links = [link for link in self.links[dpid].values() for dpid in
                      self.links.keys()]
         else:
-            links = self.links[dpid]
+            links = self.links[dpid].values()
         rep = event.EventLinkReply(req.src, dpid, links)
         self.reply_to_request(req, rep)
-
-    @Pyro4.expose
-    def report_links(self, dpid, links):
-        self.links[dpid] = links
-        self._logger.info('Link report from %d', dpid)
 
     @Pyro4.expose
     def unregister(self, dpid, name, uri):
@@ -74,6 +69,7 @@ class TopologyApp(Ryuo):
         src_port = Port(src_port_data)
         try:
             dst_port = self.switches[dst_port_data.dpid][dst_port_data.port_no]
+            del self.links[src_port.dpid][dst_port.dpid]
             self.send_event_to_observers(
                 event.EventLinkDelete(Link(src_port, dst_port)))
         except KeyError:
@@ -84,8 +80,11 @@ class TopologyApp(Ryuo):
         src_port = Port(src_port_data)
         try:
             dst_port = self.switches[dst_port_data.dpid][dst_port_data.port_no]
-            self.send_event_to_observers(
-                event.EventLinkAdd(Link(src_port, dst_port)))
+            link = Link(src_port, dst_port)
+            if src_port.dpid not in self.links.keys():
+                self.links[src_port.dpid] = {}
+            self.links[src_port.dpid][dst_port.dpid] = link
+            self.send_event_to_observers(event.EventLinkAdd(link))
         except KeyError:
             self._logger.error('Cannot find dst port %s', str(dst_port_data))
 
