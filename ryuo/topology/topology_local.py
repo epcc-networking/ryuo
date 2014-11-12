@@ -49,7 +49,7 @@ class TopologyLocal(LocalController):
     def _register(self, dp):
         super(TopologyLocal, self)._register(dp)
         self._init_flows()
-        ports = [Port(PortData(dp.id, dp.ofproto, port)) for port in dp.ports]
+        ports = [Port(PortData(dp.id, port, dp.ofproto)) for port in dp.ports]
         for port in ports:
             if not port.is_reserved():
                 self._port_added(port)
@@ -86,7 +86,7 @@ class TopologyLocal(LocalController):
         self.ports.clear()
 
     def _get_port(self, port_no):
-        for port in self.ports:
+        for port in self.ports.keys():
             if port.port_no == port_no:
                 return port
 
@@ -97,20 +97,25 @@ class TopologyLocal(LocalController):
         dp = msg.datapath
         ofpport = msg.desc
         ofp = dp.ofproto
-        port = self._get_port(ofpport.port_no)
 
         if reason == ofp.OFPPR_ADD:
-            self.ryuo.port_added(port.port_data)
-            if port and not port.is_reserved():
+            port = Port(PortData(self.dp.id, ofpport, ofp))
+            if not port.is_reserved():
+                self._port_added(port)
+                self.ryuo.port_added(port.port_data)
                 self.lldp_event.set()
         elif reason == ofp.OFPPR_DELETE:
-            self.ryuo.port_deleted(port)
+            port = self._get_port(ofpport.port_no)
             if port and not port.is_reserved():
+                del self.ports[Port(PortData(self.dp.id, ofpport))]
+                self.ryuo.port_deleted(port)
                 self._link_down(port)
                 self.lldp_event.set()
         else:
-            self.ryuo.port_modified(port.port_data)
+            port = self._get_port(ofpport.port_no)
             if port and not port.is_reserved():
+                port.modify(ofpport)
+                self.ryuo.port_modified(port.port_data)
                 if self.ports.set_down(port):
                     self._link_down(port)
                 self.lldp_event.set()
@@ -125,7 +130,7 @@ class TopologyLocal(LocalController):
         if port_data.is_down:
             return
 
-        dp = self.dps.get(port.dpid, None)
+        dp = self.dp
         if dp is None:
             # datapath was already deleted
             return

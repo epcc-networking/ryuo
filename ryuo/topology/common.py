@@ -7,22 +7,13 @@ class PortData(object):
     Passing port information between ryuo and ryu.
     """
 
-    def __init__(self, dpid, ofproto=None, ofpport=None, port_no=None):
+    def __init__(self, dpid, ofpport, ofproto=None, port_no=None):
         super(PortData, self).__init__()
         self.dpid = dpid
-        if ofpport and ofproto:
-            self.port_no = ofpport.port_no
-            self.hw_addr = ofpport.hw_addr
-            self.name = ofpport.name
-            self.is_reserved = self.port_no > ofproto.OFPP_MAX
-            self.is_down = (ofpport.state & ofproto.OFPPS_LINK_DOWN) > 0 \
-                           or (ofpport.config & ofproto.OFPPC_PORT_DOWN)
-        else:
-            self.port_no = port_no
-            self.hw_addr = None
-            self.name = None
-            self.is_down = False
-            self.is_reserved = False
+        self.ofpport = ofpport
+        self.OFPP_MAX = ofproto.OFPP_MAX
+        self.OFPPS_LINK_DOWN = ofproto.OFPPS_LINK_DOWN
+        self.OFPPC_Root_DOWN = ofproto.OFPPC_PORT_DOWN
 
 
 class Port(object):
@@ -35,19 +26,22 @@ class Port(object):
         super(Port, self).__init__()
         self.dpid = port_data.dpid
 
-        self.port_no = port_data.port_no
-        self.hw_addr = port_data.hw_addr
-        self.name = port_data.name
+        self.port_no = port_data.ofpport.port_no
+        self.hw_addr = port_data.ofpport.hw_addr
+        self.name = port_data.ofpport.name
 
-        self._is_reserved = port_data.is_reserved
-        self._is_down = port_data.is_down
         self.port_data = port_data
 
+    def modify(self, ofpport):
+        self.port_data.ofpport = ofpport
+
     def is_reserved(self):
-        return self._is_reserved
+        return self.port_no > self.ofpport.OFPP_MAX
 
     def is_down(self):
-        return self._is_down
+        ofpport = self.port_data.ofpport
+        return (ofpport.state & self.port_data.OFPPS_LINK_DOWN) > 0 \
+               or (ofpport.config & self.port_data.OFPPC_PORT_DOWN)
 
     def is_alive(self):
         return not self.is_down()
