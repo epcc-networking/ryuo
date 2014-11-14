@@ -12,6 +12,7 @@ from ryu.topology.switches import LLDPPacket, PortDataState, LinkState, Link
 
 from ryuo.common.local_controller import LocalController
 from ryuo.topology.common import PortData, Port
+from ryuo.topology.topology_app import TopologyApp
 
 
 class TopologyLocal(LocalController):
@@ -30,6 +31,7 @@ class TopologyLocal(LocalController):
     LINK_LLDP_DROP = 5
 
     def __init__(self, *args, **kwargs):
+        kwargs['ryuo_name'] = TopologyApp.__name__
         super(TopologyLocal, self).__init__(*args, **kwargs)
         self._logger = logging.getLogger(self.__class__.__name__)
         self.is_active = True
@@ -46,10 +48,11 @@ class TopologyLocal(LocalController):
             port.dpid, port.port_no, port.hw_addr, self.DEFAULT_TTL)
         self.ports.add_port(port, lldp_data)
 
-    def _register(self, dp):
-        super(TopologyLocal, self)._register(dp)
+    def _switch_enter(self, dp):
+        super(TopologyLocal, self)._switch_enter(dp)
         self._init_flows()
-        ports = [Port(PortData(dp.id, port, dp.ofproto)) for port in dp.ports]
+        ports = [Port(PortData(dp.id, port, dp.ofproto)) for port in
+                 dp.ports.values()]
         for port in ports:
             if not port.is_reserved():
                 self._port_added(port)
@@ -58,7 +61,7 @@ class TopologyLocal(LocalController):
 
     def _init_flows(self):
         ofp = self.dp.ofproto
-        ofp_parser = ofp.parser
+        ofp_parser = self.dp.ofproto_parser
         if ofp.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
             match = ofp_parser.OFPMatch(
                 eth_type=ETH_TYPE_LLDP,
@@ -71,7 +74,7 @@ class TopologyLocal(LocalController):
             mod = ofp_parser.OFPFlowMod(datapath=self.dp,
                                         match=match,
                                         idle_timeout=0,
-                                        hard_timout=0,
+                                        hard_timeout=0,
                                         instructions=inst,
                                         priority=0xFFFF)
             self.dp.send_msg(mod)
@@ -80,8 +83,8 @@ class TopologyLocal(LocalController):
                 'Cannot install flow, unsupported OF version %x',
                 ofp.OFP_VERSION)
 
-    def _unregister(self):
-        super(TopologyLocal, self)._unregister()
+    def _switch_leave(self):
+        super(TopologyLocal, self)._switch_leave()
         self.links.clear()
         self.ports.clear()
 
@@ -115,7 +118,7 @@ class TopologyLocal(LocalController):
             port = self._get_port(ofpport.port_no)
             if port and not port.is_reserved():
                 port.modify(ofpport)
-                self.ryuo.port_modified(port.port_data)
+                self.ryuo.port_modified(PortData(self.dp.id, ofpport, ofp))
                 if self.ports.set_down(port):
                     self._link_down(port)
                 self.lldp_event.set()
@@ -239,9 +242,12 @@ class TopologyLocal(LocalController):
             self.link_event.wait(timeout=self.TIMEOUT_CHECK_PERIOD)
 
     def _link_down(self, port):
+        self._logger.info('Link down: %d.%d', port.dpid,
+                          port.port_data.ofpport.port_no)
         try:
             dst, rev_link_dst = self.links.port_deleted(port)
         except KeyError:
+            self._logger.info('Cannot find peer')
             return
-        self.ryuo.link_deleted(port, dst)
+        self.ryuo.link_deleted(port.port_data, dst.port_data)
 

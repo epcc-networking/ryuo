@@ -13,13 +13,11 @@ from ryu.ofproto import ether
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
 
-from central.config import ARP_EXPIRE_SECOND
 from constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, PORT_UP
-from central.common.local_controller import LocalController
 from resilient_router import ARP, ip_addr_ntoa
 from utils import mask_ntob, nw_addr_aton, ipv4_apply_mask
 
@@ -158,12 +156,12 @@ class KFRoutingLocal(LocalController):
         #                     dst_macs)
 
     def _register(self, dp):
-        super(KFRoutingLocal, self)._register(dp)
+        super(KFRoutingLocal, self)._switch_enter(dp)
         self.groups.clear()
         self.routing_table.clear()
 
     def _unregister(self):
-        super(KFRoutingLocal, self)._unregister()
+        super(KFRoutingLocal, self)._switch_leave()
         self.arp_table.clear()
 
     def _packet_in_arp(self, msg, headers):

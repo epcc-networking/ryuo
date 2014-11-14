@@ -1,6 +1,10 @@
+import logging
+
 from ryu.lib.dpid import dpid_to_str
 from ryu.lib.port_no import port_no_to_str
 
+
+LOG = logging.getLogger(__name__)
 
 class PortData(object):
     """
@@ -13,7 +17,7 @@ class PortData(object):
         self.ofpport = ofpport
         self.OFPP_MAX = ofproto.OFPP_MAX
         self.OFPPS_LINK_DOWN = ofproto.OFPPS_LINK_DOWN
-        self.OFPPC_Root_DOWN = ofproto.OFPPC_PORT_DOWN
+        self.OFPPC_PORT_DOWN = ofproto.OFPPC_PORT_DOWN
 
 
 class Port(object):
@@ -34,14 +38,16 @@ class Port(object):
 
     def modify(self, ofpport):
         self.port_data.ofpport = ofpport
+        self.hw_addr = ofpport.hw_addr
+        self.name = ofpport.name
 
     def is_reserved(self):
-        return self.port_no > self.ofpport.OFPP_MAX
+        return self.port_no > self.port_data.OFPP_MAX
 
     def is_down(self):
         ofpport = self.port_data.ofpport
         return (ofpport.state & self.port_data.OFPPS_LINK_DOWN) > 0 \
-               or (ofpport.config & self.port_data.OFPPC_PORT_DOWN)
+               or (ofpport.config & self.port_data.OFPPC_PORT_DOWN) > 0
 
     def is_alive(self):
         return not self.is_down()
