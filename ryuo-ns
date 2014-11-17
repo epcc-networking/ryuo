@@ -1,0 +1,1 @@
+PYRO_SERIALIZERS_ACCEPTED=serpent,pickle python2 -m Pyro4.naming -n localhost
