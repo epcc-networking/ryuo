@@ -7,15 +7,13 @@ class RyuoOVSSwitch(OVSSwitch):
     """Open vSwitch switch, with local ryu controller."""
 
     def __init__(self, name, failMode='secure', datapath='kernel',
-                 inband=False, protocols=None, tcp_port=6634,
-                 controller_working_dir='', *ryu_args, **params):
+                 inband=False, protocols=None,
+                 controller_working_dir='', ryu_args=None, **params):
         super(RyuoOVSSwitch, self).__init__(name, failMode, datapath, inband,
                                             protocols, **params)
-        self.controller_tcp_port = tcp_port
-        params['port'] = tcp_port
         self.controller = RyuoLocalController('%s-ryu' % name,
                                               controller_working_dir,
-                                              ryu_args,
+                                              *ryu_args,
                                               **params)
 
     def start(self, controllers):

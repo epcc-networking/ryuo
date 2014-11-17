@@ -6,18 +6,23 @@ from ryu.lib.port_no import port_no_to_str
 
 LOG = logging.getLogger(__name__)
 
+
 class PortData(object):
     """
     Passing port information between ryuo and ryu.
     """
 
-    def __init__(self, dpid, ofpport, ofproto=None, port_no=None):
+    def __init__(self, dpid, ofpport=None, ofproto=None, port_no=None):
         super(PortData, self).__init__()
         self.dpid = dpid
-        self.ofpport = ofpport
-        self.OFPP_MAX = ofproto.OFPP_MAX
-        self.OFPPS_LINK_DOWN = ofproto.OFPPS_LINK_DOWN
-        self.OFPPC_PORT_DOWN = ofproto.OFPPC_PORT_DOWN
+        self.port_no = port_no
+        self.ofpport = None
+        if ofpport:
+            self.port_no = ofpport.port_no
+            self.ofpport = ofpport
+            self.OFPP_MAX = ofproto.OFPP_MAX
+            self.OFPPS_LINK_DOWN = ofproto.OFPPS_LINK_DOWN
+            self.OFPPC_PORT_DOWN = ofproto.OFPPC_PORT_DOWN
 
 
 class Port(object):
@@ -26,13 +31,17 @@ class Port(object):
     an ofproto object
     """
 
+    LIVE_MSG = {False: 'DOWN', True: 'LIVE'}
+
     def __init__(self, port_data):
         super(Port, self).__init__()
         self.dpid = port_data.dpid
 
-        self.port_no = port_data.ofpport.port_no
-        self.hw_addr = port_data.ofpport.hw_addr
-        self.name = port_data.ofpport.name
+        self.port_no = port_data.port_no
+
+        if port_data.ofpport:
+            self.hw_addr = port_data.ofpport.hw_addr
+            self.name = port_data.ofpport.name
 
         self.port_data = port_data
 
@@ -68,9 +77,8 @@ class Port(object):
         return hash((self.dpid, self.port_no))
 
     def __str__(self):
-        LIVE_MSG = {False: 'DOWN', True: 'LIVE'}
         return 'Port<dpid=%s, port_no=%s, %s>' % \
-               (self.dpid, self.port_no, LIVE_MSG[self.is_alive()])
+               (self.dpid, self.port_no, self.LIVE_MSG[self.is_alive()])
 
 
 class Switch(object):
@@ -98,4 +106,3 @@ class Switch(object):
             msg += str(port) + ' '
         msg += '>'
         return msg
-

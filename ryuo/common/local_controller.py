@@ -55,8 +55,7 @@ class LocalController(app_manager.RyuApp):
         self._setup_logger(dp.id)
         self.dp = dp
         self.ofctl = OfCtl(dp, self._logger)
-        self.init_switch()
-        self._logger.info('Ready to work')
+        self._logger.info('Switch entered, ready to work')
 
         self.ryuo.ryuo_switch_enter(dp.id, self.uri)
 
@@ -73,9 +72,6 @@ class LocalController(app_manager.RyuApp):
         self._logger = logging.getLogger(
             self.__class__.__name__ + ' ' + str(dpid))
         config_logger(self._logger)
-
-    def init_switch(self):
-        pass
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def datapath_handler(self, ev):

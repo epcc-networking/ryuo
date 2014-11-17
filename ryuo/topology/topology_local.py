@@ -60,6 +60,7 @@ class TopologyLocal(LocalController):
                                [port.port_data for port in self.ports.keys()])
 
     def _init_flows(self):
+        self._logger.info('Init flow table.')
         ofp = self.dp.ofproto
         ofp_parser = self.dp.ofproto_parser
         if ofp.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
@@ -191,8 +192,8 @@ class TopologyLocal(LocalController):
         try:
             src_dpid, src_port_no = LLDPPacket.lldp_parse(msg.data)
         except LLDPPacket.LLDPUnknownFormat as e:
+            self._logger.error('LLDPUnknownFormat')
             return
-        dst_dpid = msg.datapath.id
         dst_port_no = None
         if ofp.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
             dst_port_no = msg.match['in_port']
@@ -200,23 +201,31 @@ class TopologyLocal(LocalController):
             self._logger.error(
                 'Cannot accept LLDP, unsupported OF version %x.',
                 ofp.OFP_VERSION)
-        src = self._get_port(src_port_no)
-        if not src or src.dpid == dst_dpid:
+        dst = self._get_port(dst_port_no)
+        self._logger.info('LLDP from %d.%d -> %d',
+                          src_dpid,
+                          src_port_no,
+                          dst_port_no)
+        if not dst:
+            self._logger.warning('Dst not found.')
             return
-        try:
-            self.ports.lldp_received(src)
-        except KeyError:
-            pass
-        dst = Port(PortData(dst_dpid, port_no=dst_port_no))
-        old_peer = self.links.get_peer(src)
-        if old_peer and old_peer != dst:
-            self.ryuo.link_deleted(src, old_peer)
+        self.ports.lldp_received(dst)
+        src = Port(PortData(src_dpid, port_no=src_port_no))
+        old_peer = self.links.get_peer(dst)
+        if old_peer and old_peer != src:
+            self._logger.info('Peer changed.')
+            self.ryuo.link_deleted(old_peer.port_data, dst.port_data)
         link = Link(src, dst)
         if link not in self.links:
-            self.ryuo.link_added(src, dst)
+            self.ryuo.link_added(src.port_data, dst.port_data)
 
         # Always return false, since we don't have the reverse link information
         self.links.update_link(src, dst)
+        self._logger.info('Update link %d.%d -> %d.%d',
+                          src.dpid,
+                          src.port_no,
+                          dst.dpid,
+                          dst.port_no)
 
     def link_loop(self):
         while self.is_active:
@@ -242,12 +251,16 @@ class TopologyLocal(LocalController):
             self.link_event.wait(timeout=self.TIMEOUT_CHECK_PERIOD)
 
     def _link_down(self, port):
-        self._logger.info('Link down: %d.%d', port.dpid,
-                          port.port_data.ofpport.port_no)
         try:
             dst, rev_link_dst = self.links.port_deleted(port)
+            self._logger.info('Link down: %d.%d -> %d.%d',
+                              port.dpid,
+                              port.port_no,
+                              dst.dpid,
+                              dst.port_no)
         except KeyError:
-            self._logger.info('Cannot find peer')
+            self._logger.info('Cannot find peer of %d.%d',
+                              port.dpid,
+                              port.port_no)
             return
         self.ryuo.link_deleted(port.port_data, dst.port_data)
-
