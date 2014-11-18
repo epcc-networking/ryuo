@@ -1,4 +1,3 @@
-import logging
 import time
 
 from ryu.controller import ofp_event
@@ -8,7 +7,7 @@ from ryu.lib.mac import DONTCARE_STR
 from ryu.lib.packet import lldp
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 from ryu.ofproto.ether import ETH_TYPE_LLDP
-from ryu.topology.switches import LLDPPacket, PortDataState, LinkState, Link
+from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
 
 from ryuo.common.local_controller import LocalController
 from ryuo.topology.common import PortData, Port
@@ -33,11 +32,10 @@ class TopologyLocal(LocalController):
     def __init__(self, *args, **kwargs):
         kwargs['ryuo_name'] = TopologyApp.__name__
         super(TopologyLocal, self).__init__(*args, **kwargs)
-        self._logger = logging.getLogger(self.__class__.__name__)
         self.is_active = True
         self.explicit_drop = True
         self.ports = PortDataState()
-        self.links = LinkState()
+        self.links = _LinkState()
         self.lldp_event = hub.Event()
         self.link_event = hub.Event()
         self.threads.append(hub.spawn(self.lldp_loop))
@@ -58,6 +56,7 @@ class TopologyLocal(LocalController):
                 self._port_added(port)
         self.ryuo.switch_enter(dp.id,
                                [port.port_data for port in self.ports.keys()])
+        self.lldp_event.set()
 
     def _init_flows(self):
         self._logger.info('Init flow table.')
@@ -130,6 +129,7 @@ class TopologyLocal(LocalController):
         except KeyError as e:
             # ports can be modified during our sleep in self.lldp_loop()
             # LOG.debug('send_lldp: KeyError %s', e)
+            self._logger.warning('Missing port %d.', port.port_no)
             return
         if port_data.is_down:
             return
@@ -137,6 +137,7 @@ class TopologyLocal(LocalController):
         dp = self.dp
         if dp is None:
             # datapath was already deleted
+            self._logger.warning('Switch left.')
             return
 
         # LOG.debug('lldp sent dpid=%s, port_no=%d', dp.id, port.port_no)
@@ -155,6 +156,7 @@ class TopologyLocal(LocalController):
 
     def lldp_loop(self):
         while self.is_active:
+            self._logger.debug('LLDP loop')
             self.lldp_event.clear()
 
             now = time.time()
@@ -172,12 +174,18 @@ class TopologyLocal(LocalController):
                     continue
 
                 timeout = expire - now
-                break
+                # break
 
             for port in ports_now:
                 self.send_lldp_packet(port)
+                self._logger.debug('Sending LLDP to %d.%d',
+                                   port.dpid,
+                                   port.port_no)
             for port in ports:
                 self.send_lldp_packet(port)
+                self._logger.debug('Sending LLDP to %d.%d',
+                                   port.dpid,
+                                   port.port_no)
                 hub.sleep(self.LLDP_SEND_GUARD)  # don't burst
 
             if timeout is not None and ports:
@@ -218,6 +226,7 @@ class TopologyLocal(LocalController):
         link = Link(src, dst)
         if link not in self.links:
             self.ryuo.link_added(src.port_data, dst.port_data)
+            self.lldp_event.set()
 
         # Always return false, since we don't have the reverse link information
         self.links.update_link(src, dst)
@@ -252,15 +261,61 @@ class TopologyLocal(LocalController):
 
     def _link_down(self, port):
         try:
-            dst, rev_link_dst = self.links.port_deleted(port)
+            src, rev_link_dst = self.links.dst_port_deleted(port)
             self._logger.info('Link down: %d.%d -> %d.%d',
+                              src.dpid,
+                              src.port_no,
                               port.dpid,
-                              port.port_no,
-                              dst.dpid,
-                              dst.port_no)
+                              port.port_no)
         except KeyError:
             self._logger.info('Cannot find peer of %d.%d',
                               port.dpid,
                               port.port_no)
             return
-        self.ryuo.link_deleted(port.port_data, dst.port_data)
+        self.ryuo.link_deleted(src.port_data, port.port_data)
+
+    def close(self):
+        self.is_active = False
+        self.lldp_event.set()
+        self.link_event.set()
+        super(TopologyLocal, self).close()
+
+
+class _LinkState(LinkState):
+    def __init__(self):
+        super(_LinkState, self).__init__()
+        self._rmap = {}
+
+    def get_peer(self, port):
+        peer = self._map.get(port, None)
+        if peer is None:
+            return self._rmap.get(port, None)
+        return peer
+
+    def update_link(self, src, dst):
+        self._rmap[dst] = src
+        return super(_LinkState, self).update_link(src, dst)
+
+    def link_down(self, link):
+        del self._rmap[link.dst]
+        super(_LinkState, self).link_down(link)
+
+    def port_deleted(self, src):
+        dst, rev_link_dst = super(_LinkState, self).port_deleted(src)
+        del self._rmap[dst]
+        return dst, rev_link_dst
+
+    def dst_port_deleted(self, dst):
+        src = self.get_peer(dst)
+        if src is None:
+            raise KeyError()
+
+        link = Link(src, dst)
+        rev_link = Link(dst, src)
+        del self[link]
+        del self._map[src]
+        del self._rmap[dst]
+        self.pop(rev_link, None)
+        rev_link_dst = self._map.pop(dst, None)
+
+        return src, rev_link_dst
