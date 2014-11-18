@@ -128,8 +128,7 @@ class TopologyLocal(LocalController):
             port_data = self.ports.lldp_sent(port)
         except KeyError as e:
             # ports can be modified during our sleep in self.lldp_loop()
-            # LOG.debug('send_lldp: KeyError %s', e)
-            self._logger.warning('Missing port %d.', port.port_no)
+            self._logger.warning('Missing port %d, %s.', port.port_no, e)
             return
         if port_data.is_down:
             return
@@ -200,7 +199,7 @@ class TopologyLocal(LocalController):
         try:
             src_dpid, src_port_no = LLDPPacket.lldp_parse(msg.data)
         except LLDPPacket.LLDPUnknownFormat as e:
-            self._logger.error('LLDPUnknownFormat')
+            self._logger.error('LLDPUnknownFormat %s', e)
             return
         dst_port_no = None
         if ofp.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
