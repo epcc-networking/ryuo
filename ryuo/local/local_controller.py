@@ -7,9 +7,9 @@ from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
 
-from utils import config_logger
+from ryuo.utils import config_logger
 from ryuo.config import CENTRAL_HOST_NAME
-from ofctl import OfCtl
+from ryuo.local.ofctl import OfCtl
 
 
 Pyro4.config.REQUIRE_EXPOSE = True

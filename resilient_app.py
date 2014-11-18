@@ -10,11 +10,11 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
-from constants import LINK_UP, LINK_DOWN, PORT_UP
+from ryuo.constants import LINK_UP, LINK_DOWN, PORT_UP
 from ryuo.kf_routing import KFRouting
 from rest_controller import RestController
 from router import Router
-from utils import config_logger
+from ryuo.utils import config_logger
 
 
 class ResilientApp(app_manager.RyuApp):

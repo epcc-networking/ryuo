@@ -7,7 +7,7 @@ from ryu.controller import dpset
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 
-from utils import config_logger
+from ryuo.utils import config_logger
 
 
 Pyro4.config.REQUIRE_EXPOSE = True

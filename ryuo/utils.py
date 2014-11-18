@@ -4,7 +4,7 @@ import struct
 
 from ryu.lib import addrconv
 
-from constants import UINT32_MAX
+from ryuo.constants import UINT32_MAX
 
 
 def config_logger(logger):

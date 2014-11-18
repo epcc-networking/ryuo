@@ -1,6 +1,6 @@
 import logging
 
-from utils import ipv4_apply_mask, nw_addr_aton, ip_addr_aton, ip_addr_ntoa, \
+from ryuo.utils import ipv4_apply_mask, nw_addr_aton, ip_addr_aton, ip_addr_ntoa, \
     config_logger
 
 

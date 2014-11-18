@@ -1,8 +1,7 @@
-#!/usr/bin/env python2
 import time
 
 import Pyro4
-from ryu.controller import ofp_event
+from ryu.controller import ofp_event, handler
 from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls
 from ryu.lib.packet import packet
 from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
@@ -12,23 +11,28 @@ from ryu.lib.packet.icmp import icmp, ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
 from ryu.ofproto import ether
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
+from ryu.topology.event import EventPortDelete, EventPortAdd, \
+    EventPortModify, \
+    EventLinkAdd, EventLinkDelete
 
-from constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
+from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
-    MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, PORT_UP
-from resilient_router import ARP, ip_addr_ntoa
-from ryuo.common.local_controller import LocalController
+    MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, \
+    PORT_UP, \
+    ARP
+from ryuo.local.local_controller import LocalController
 from ryuo.config import ARP_EXPIRE_SECOND
-from utils import mask_ntob, nw_addr_aton, ipv4_apply_mask
+from ryuo.utils import mask_ntob, nw_addr_aton, ipv4_apply_mask, ip_addr_ntoa
 
 
 class KFRoutingLocal(LocalController):
     def __init__(self, *args, **kwargs):
         super(KFRoutingLocal, self).__init__(*args, **kwargs)
+        self.ports = _Ports()  # port_no -> Port
         self.arp_table = _ArpTable()
-        self.groups = _GroupTable()
+        self.groups = None
         self.routing_table = _RoutingTable(self._logger)
         self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
@@ -36,12 +40,10 @@ class KFRoutingLocal(LocalController):
     @Pyro4.expose
     def add_route(self, dst_ip, in_port, output_ports):
         group = self.groups.add_entry(output_ports)
-        self._set_group(in_port, output_ports)
         route = self.routing_table.add_entry(dst_ip=dst_ip,
                                              in_port=in_port,
                                              out_group=group.id)
         self._install_routing_entry(route)
-
 
     @Pyro4.expose
     def set_port_address(self, ip_str, port_no):
@@ -116,9 +118,35 @@ class KFRoutingLocal(LocalController):
                     return self._packet_in_tcp_udp(msg, headers)
             return self._packet_in_to_node(msg, headers)
 
-    # @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
-    # def port_status_change(self, ev):
-    # pass
+    @handler.set_ev_cls(EventPortDelete)
+    def _on_port_deleted(self, ev):
+        del self.ports[ev.port.port_no]
+
+    @handler.set_ev_cls(EventPortAdd)
+    def _on_port_added(self, ev):
+        self.ports[ev.port.port_no] = _Port(ev.port.port_no, ev.port.hw_addr)
+
+    @handler.set_ev_cls(EventPortModify)
+    def _on_port_modified(self, ev):
+        port = ev.port
+        if port.is_down():
+            self.ports[port.port_no].down()
+        else:
+            self.ports[port.port_no].up()
+
+    @handler.set_ev_cls(EventLinkAdd)
+    def _on_link_added(self, ev):
+        dst_port_no = ev.link.dst.port_no
+        peer_mac = ev.link.src.hw_addr
+        old_peer_mac = self.ports[dst_port_no].peer_mac
+        if peer_mac != old_peer_mac:
+            # TODO: update flow entries
+            pass
+        self.ports[dst_port_no].set_peer_mac(peer_mac)
+
+    @handler.set_ev_cls(EventLinkDelete)
+    def _on_link_deleted(self, ev):
+        pass
 
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
@@ -146,24 +174,17 @@ class KFRoutingLocal(LocalController):
                                     in_port=route.in_port,
                                     out_group=route.out_group)
 
-    def _set_group(self, in_port, output_ports):
-        watch_ports = output_ports
-        output_ports = [
-            port if port != in_port else self.dp.ofproto.OFPP_IN_PORT for port
-            in output_ports]
-        # self.ofctl.set_group(self._group_id,
-        #                     watch_ports,
-        #                     output_ports,
-        #                     src_macs,
-        #                     dst_macs)
-
     def _register(self, dp):
         super(KFRoutingLocal, self)._switch_enter(dp)
-        self.groups.clear()
+        for ofpport in dp.ports:
+            self.ports[ofpport.port_no] = _Port(ofpport.port_no,
+                                                ofpport.hw_addr)
+        self.groups = _GroupTable(self.ofctl, self.ports)
         self.routing_table.clear()
 
     def _unregister(self):
         super(KFRoutingLocal, self)._switch_leave()
+        self.groups = None
         self.arp_table.clear()
 
     def _packet_in_arp(self, msg, headers):
@@ -421,25 +442,53 @@ class _SuspendPacket(object):
 
 
 class _Group(object):
-    def __init__(self, group_id, output_ports):
+    def __init__(self, group_id, watch_ports, output_ports, inport,
+                 group_table):
         super(_Group, self).__init__()
         self.id = group_id
         self.output_ports = output_ports
+        self.watch_ports = watch_ports
+        self.inport = inport
+        self.group_table = group_table
+
+    def install(self):
+        self._set(self.group_table.ofctl.dp.ofproto.OFPGC_ADD)
+
+    def update(self):
+        self._set(self.group_table.ofctl.dp.ofproto.OFPGC_MODIFY)
+
+    def _set(self, command):
+        ofctl = self.group_table.ofctl
+        ports = self.group_table.ports
+        output_ports = [
+            port_no if port_no != self.inport else ofctl.dp.ofproto.OFPP_INPORT
+            for port_no in self.output_ports]
+        src_macs = [ports[port_no].mac for port_no in self.output_ports]
+        dst_macs = [ports[port_no].peer_mac for port_no in self.output_ports]
+        ofctl.set_failover_group(self.id, self.watch_ports, output_ports,
+                                 src_macs, dst_macs, command)
 
 
 class _GroupTable(dict):
-    def __init__(self):
+    def __init__(self, ofctl, ports):
         super(_GroupTable, self).__init__()
         self.group_id = 0
+        self.ofctl = ofctl
+        self.ports = ports
 
     def clear(self):
         super(_GroupTable, self).clear()
 
-    def add_entry(self, output_ports):
-        group = _Group(self.group_id, output_ports)
+    def add_entry(self, output_ports, inport):
+        group = _Group(self.group_id, output_ports, output_ports, inport, self)
         self[self.group_id] = group
         self.group_id += 1
         return group
+
+    def update_entry(self, port_no):
+        for group in self.values():
+            if port_no in group.output_ports:
+                group.update()
 
 
 class _Route(object):
@@ -493,3 +542,59 @@ class _RoutingTable(dict):
                     get_route = route
                     mask = route.netmask
         return get_route
+
+
+class _Ports(dict):
+    def __init__(self):
+        super(_Ports, self).__init__()
+
+    def get_by_ip(self, ip):
+        for port in self.values():
+            if port.ip is None:
+                continue
+            if ipv4_apply_mask(ip, port.netmask) == port.ip:
+                return port
+
+    def get_by_mac(self, mac):
+        for port in self.values():
+            if port.mac == mac:
+                return port
+
+
+class _Port(object):
+    _PORT_UP = 1
+    _PORT_DOWN = 0
+
+    def __init__(self, port_no, mac):
+        super(_Port, self).__init__()
+        self.port_no = port_no
+        self.ip = None
+        self.nw = None
+        self.netmask = None
+        self.mac = mac
+        self.peer_mac = None
+        self.links = {}
+        self.status = self._PORT_UP
+
+    def set_ip(self, nw, mask, ip):
+        self.nw = nw
+        self.netmask = mask
+        self.ip = ip
+
+    def add_link(self, link):
+        self.links[link.dst.hw_addr] = link
+
+    def is_up(self):
+        return self.status == self._PORT_UP
+
+    def up(self):
+        self.status = self._PORT_UP
+
+    def down(self):
+        self.status = self._PORT_DOWN
+
+    def set_peer_mac(self, mac):
+        self.peer_mac = mac
+
+    def set_mac(self, mac):
+        self.mac = mac

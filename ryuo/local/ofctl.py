@@ -2,8 +2,8 @@ from ryu.ofproto import inet
 from ryu.ofproto import ether
 from ryu.lib.packet import packet
 
-from utils import *
-from constants import *
+from ryuo.utils import *
+from ryuo.constants import *
 
 
 UINT32_MAX = 0xffffffff
@@ -134,7 +134,8 @@ class OfCtl(object):
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
                       nw_proto=nw_proto, actions=actions)
 
-    def set_group(self, group_id, watch_ports, out_ports, src_macs, dst_macs):
+    def set_failover_group(self, group_id, watch_ports, out_ports, src_macs,
+                           dst_macs, command):
         ofp_parser = self.dp.ofproto_parser
         actions = [[ofp_parser.OFPActionSetField(eth_src=src_macs[i]),
                     ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
@@ -143,11 +144,21 @@ class OfCtl(object):
         buckets = [ofp_parser.OFPBucket(0, port, 0, actions[i]) for
                    i, port in enumerate(watch_ports)]
         req = ofp_parser.OFPGroupMod(self.dp,
-                                     self.dp.ofproto.OFPFC_ADD,
+                                     command,
                                      self.dp.ofproto.OFPGT_FF,
                                      group_id,
                                      buckets)
         self.dp.send_msg(req)
+
+    def modify_failover_group(self, group_id, watch_ports, out_ports, src_macs,
+                              dst_macs):
+        self.set_failover_group(group_id, watch_ports, out_ports, src_macs,
+                                dst_macs, self.dp.ofproto.OFPGC_MODIFY)
+
+    def add_failover_group(self, group_id, watch_ports, out_ports, src_macs,
+                           dst_macs):
+        self.set_failover_group(group_id, watch_ports, out_ports, src_macs,
+                                dst_macs, self.dp.ofproto.OFPGC_ADD)
 
     def send_icmp(self, in_port, protocol_list, icmp_type, icmp_code,
                   icmp_data=None, msg_data=None, src_ip=None):

@@ -1,4 +1,4 @@
-from constants import ARP
+from ryuo.constants import ARP
 from resilient_app import LINK_UP
 
 from routing import Routing, BaseRoutingTable

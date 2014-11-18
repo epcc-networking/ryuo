@@ -7,9 +7,10 @@ from ryu.lib.mac import DONTCARE_STR
 from ryu.lib.packet import lldp
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 from ryu.ofproto.ether import ETH_TYPE_LLDP
+from ryu.topology import event
 from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
 
-from ryuo.common.local_controller import LocalController
+from ryuo.local.local_controller import LocalController
 from ryuo.topology.common import PortData, Port
 from ryuo.topology.topology_app import TopologyApp
 
@@ -18,6 +19,12 @@ class TopologyLocal(LocalController):
     OFP_VERSIONS = [ofproto_v1_2.OFP_VERSION,
                     ofproto_v1_3.OFP_VERSION,
                     ofproto_v1_4.OFP_VERSION]
+
+    _EVENTS = {event.EventPortAdd,
+               event.EventPortDelete,
+               event.EventPortModify,
+               event.EventLinkAdd,
+               event.EventLinkDelete}
     """
     Ryu topology module ported to Local Controller
     """
@@ -93,6 +100,18 @@ class TopologyLocal(LocalController):
             if port.port_no == port_no:
                 return port
 
+    def _report_port_added(self, port):
+        self.send_event_to_observers(event.EventPortAdd(port))
+        self.ryuo.port_added(port.port_data)
+
+    def _report_port_deleted(self, port):
+        self.send_event_to_observers(event.EventPortDelete(port))
+        self.ryuo.port_deleted(port.port_data)
+
+    def _report_port_modified(self, port):
+        self.send_event_to_observers(event.EventPortModify(port))
+        self.ryuo.port_modified(port.port_data)
+
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
     def _port_status_change(self, ev):
         msg = ev.msg
@@ -105,20 +124,20 @@ class TopologyLocal(LocalController):
             port = Port(PortData(self.dp.id, ofpport, ofp))
             if not port.is_reserved():
                 self._port_added(port)
-                self.ryuo.port_added(port.port_data)
+                self._report_port_added(port)
                 self.lldp_event.set()
         elif reason == ofp.OFPPR_DELETE:
             port = self._get_port(ofpport.port_no)
             if port and not port.is_reserved():
                 del self.ports[Port(PortData(self.dp.id, ofpport))]
-                self.ryuo.port_deleted(port)
+                self._report_port_deleted(port)
                 self._link_down(port)
                 self.lldp_event.set()
         else:
             port = self._get_port(ofpport.port_no)
             if port and not port.is_reserved():
                 port.modify(ofpport)
-                self.ryuo.port_modified(PortData(self.dp.id, ofpport, ofp))
+                self._report_port_modified(port)
                 if self.ports.set_down(port):
                     self._link_down(port)
                 self.lldp_event.set()
@@ -192,6 +211,14 @@ class TopologyLocal(LocalController):
             # LOG.debug('lldp sleep %s', timeout)
             self.lldp_event.wait(timeout=timeout)
 
+    def _report_link_deleted(self, link):
+        self.send_event_to_observers(event.EventLinkDelete(link))
+        self.ryuo.link_deleted(link.src.port_data, link.dst.port_data)
+
+    def _report_link_added(self, link):
+        self.send_event_to_observers(event.EventLinkAdd(link))
+        self.ryuo.link_added(link.src.port_data, link.dst.port_data)
+
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
         msg = ev.msg
@@ -221,10 +248,10 @@ class TopologyLocal(LocalController):
         old_peer = self.links.get_peer(dst)
         if old_peer and old_peer != src:
             self._logger.info('Peer changed.')
-            self.ryuo.link_deleted(old_peer.port_data, dst.port_data)
+            self._report_link_deleted(Link(old_peer, dst))
         link = Link(src, dst)
         if link not in self.links:
-            self.ryuo.link_added(src.port_data, dst.port_data)
+            self._report_link_added(Link(src, dst))
             self.lldp_event.set()
 
         # Always return false, since we don't have the reverse link information
@@ -254,7 +281,7 @@ class TopologyLocal(LocalController):
             for link in deleted:
                 self.links.link_down(link)
                 # LOG.debug('delete %s', link)
-                self.ryuo.link_deleted(link.src.port_data, link.dst.port_data)
+                self._report_link_deleted(link)
 
             self.link_event.wait(timeout=self.TIMEOUT_CHECK_PERIOD)
 
@@ -271,7 +298,7 @@ class TopologyLocal(LocalController):
                               port.dpid,
                               port.port_no)
             return
-        self.ryuo.link_deleted(src.port_data, port.port_data)
+        self._report_link_deleted(Link(src, port))
 
     def close(self):
         self.is_active = False

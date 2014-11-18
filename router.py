@@ -9,14 +9,14 @@ from ryu.lib import mac as mac_lib
 from ryu.lib.packet import packet
 from ryu.ofproto import ether
 
-from constants import PRIORITY_MAC_LEARNING, \
+from ryuo.constants import PRIORITY_MAC_LEARNING, \
     PRIORITY_IP_HANDLING, PRIORITY_L2_SWITCHING, ARP, IPV4, ICMP, TCP, UDP, \
     PRIORITY_TYPE_ROUTE, PRIORITY_ARP_HANDLING, PRIORITY_DEFAULT_ROUTING, \
     PRIORITY_NORMAL, MAX_SUSPENDPACKETS, PRIORITY_IMPLICIT_ROUTING, \
     IDLE_TIMEOUT, ETHERNET, ARP_REPLY_TIMER, PRIORITY_STATIC_ROUTING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PORT_UP, PORT_DOWN
-from ofctl import OfCtl
-from utils import nw_addr_aton, mask_ntob, ipv4_apply_mask, ip_addr_ntoa
+from ryuo.local.ofctl import OfCtl
+from ryuo.utils import nw_addr_aton, mask_ntob, ipv4_apply_mask, ip_addr_ntoa
 
 
 class Router():
@@ -158,7 +158,8 @@ class Router():
                               packet_buffer.dst_ip)
 
     def set_group(self, src_macs, dst_macs, watch_ports, out_ports):
-        self.ofctl.set_group(self._group_id, watch_ports, out_ports, src_macs,
+        self.ofctl.add_failover_group(self._group_id, watch_ports, out_ports,
+                                      src_macs,
                              dst_macs)
         self._group_id += 1
         return self._group_id - 1

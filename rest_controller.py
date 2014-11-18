@@ -4,7 +4,7 @@ from ryu.app.wsgi import ControllerBase
 from webob import Response
 from ryu.app.wsgi import route as rest_route
 
-from constants import ROUTER_ID_PATTERN, PORTNO_PATTERN
+from ryuo.constants import ROUTER_ID_PATTERN, PORTNO_PATTERN
 
 
 class RestController(ControllerBase):
