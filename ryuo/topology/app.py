@@ -1,9 +1,9 @@
 import Pyro4
 from ryu.controller.handler import set_ev_cls
-from ryu.topology import event
 from ryu.topology.switches import Link
 
 from ryuo.controller.central import Ryuo
+from ryuo.topology import event
 from ryuo.topology.common import Switch, Port
 
 
@@ -41,6 +41,7 @@ class TopologyApp(Ryuo):
 
     @set_ev_cls(event.EventLinkRequest)
     def link_request_handler(self, req):
+        self._logger.debug('Link request.')
         dpid = req.dpid
         if dpid is None:
             links = [link for link in self.links[dpid].values() for dpid in

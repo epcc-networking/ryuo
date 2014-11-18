@@ -11,7 +11,6 @@ from ryuo.utils import config_logger
 
 
 Pyro4.config.REQUIRE_EXPOSE = True
-Pyro4.config.LOGWIRE = True
 Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
 

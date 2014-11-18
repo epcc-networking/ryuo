@@ -7,8 +7,9 @@ from ryu.lib.mac import DONTCARE_STR
 from ryu.lib.packet import lldp
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 from ryu.ofproto.ether import ETH_TYPE_LLDP
-from ryu.topology import event
 from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
+
+from ryuo.topology import event
 
 from ryuo.local.local_controller import LocalController
 from ryuo.topology.common import PortData, Port

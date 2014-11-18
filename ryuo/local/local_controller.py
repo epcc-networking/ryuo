@@ -13,7 +13,6 @@ from ryuo.local.ofctl import OfCtl
 
 
 Pyro4.config.REQUIRE_EXPOSE = True
-Pyro4.config.LOGWIRE = True
 Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
 
@@ -35,7 +34,7 @@ class LocalController(app_manager.RyuApp):
         self._ns = Pyro4.locateNS()
         host_uri = self._ns.lookup(self.ryuo_name)
         self.ryuo = Pyro4.Proxy(host_uri)
-        self._logger.info('Central host uri: %s', host_uri)
+        self._logger.info('%s host uri: %s', self.ryuo_name, host_uri)
         self.ryuo.ryuo_register(self.uri)
         self._rpc_thread = hub.spawn(self._run_rpc_daemon)
         self.threads.append(self._rpc_thread)

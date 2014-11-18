@@ -11,7 +11,9 @@ from ryu.lib.packet.icmp import icmp, ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
 from ryu.ofproto import ether
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
-from ryu.topology.event import EventPortDelete, EventPortAdd, \
+
+from ryuo.kf_routing.app import KFRoutingApp
+from ryuo.topology.event import EventPortDelete, EventPortAdd, \
     EventPortModify, \
     EventLinkAdd, EventLinkDelete
 
@@ -29,6 +31,7 @@ from ryuo.utils import mask_ntob, nw_addr_aton, ipv4_apply_mask, ip_addr_ntoa
 
 class KFRoutingLocal(LocalController):
     def __init__(self, *args, **kwargs):
+        kwargs['ryuo_name'] = KFRoutingApp.__name__
         super(KFRoutingLocal, self).__init__(*args, **kwargs)
         self.ports = _Ports()  # port_no -> Port
         self.arp_table = _ArpTable()
