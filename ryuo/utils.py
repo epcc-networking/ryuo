@@ -1,8 +1,10 @@
 import logging
 import socket
 import struct
+import json
 
 from ryu.lib import addrconv
+from webob import Response
 
 from ryuo.constants import UINT32_MAX
 
@@ -74,3 +76,12 @@ def nw_addr_aton(nw_addr, err_msg=None):
         raise ValueError(msg)
     nw_addr = ipv4_apply_mask(default_route, netmask, err_msg)
     return nw_addr, netmask, default_route
+
+
+def json_response(obj, status=200):
+    return Response(status=status, content_type='application/json',
+                    body=json.dumps(obj))
+
+
+def error_response(status, msg):
+    return json_response(msg, status=status)

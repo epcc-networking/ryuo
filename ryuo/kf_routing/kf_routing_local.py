@@ -492,13 +492,11 @@ class _GroupTable(dict):
 
 
 class _Route(object):
-    def __init__(self, route_id, dst_ip, netmask, src_mac,
-                 in_port, out_group):
+    def __init__(self, route_id, dst_ip, netmask, in_port, out_group):
         super(_Route, self).__init__()
         self.route_id = route_id
         self.dst_ip = dst_ip
         self.netmask = netmask
-        self.src_mac = src_mac
         self.in_port = in_port
         self.out_group = out_group
 
@@ -509,7 +507,7 @@ class _RoutingTable(dict):
         self._logger = logger
         self.route_id = 0
 
-    def add_entry(self, dst_ip, src_mac, in_port, out_group):
+    def add_entry(self, dst_ip, in_port, out_group):
         dst, netmask, dummy = nw_addr_aton(dst_ip)
         ip_str = ip_addr_ntoa(dst)
         key = '%s/%d' % (ip_str, netmask)
@@ -518,7 +516,6 @@ class _RoutingTable(dict):
         routing_data = _Route(route_id=self.route_id,
                               dst_ip=dst,
                               netmask=netmask,
-                              src_mac=src_mac,
                               in_port=in_port,
                               out_group=out_group)
         self[key] = routing_data
@@ -552,7 +549,7 @@ class _Ports(dict):
         for port in self.values():
             if port.ip is None:
                 continue
-            if ipv4_apply_mask(ip, port.netmask) == port.ip:
+            if ipv4_apply_mask(ip, port.netmask) == port.nw:
                 return port
 
     def get_by_mac(self, mac):

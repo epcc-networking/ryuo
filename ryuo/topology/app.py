@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 import Pyro4
 from ryu.controller.handler import set_ev_cls
 from ryu.topology import event
@@ -18,7 +17,7 @@ class TopologyApp(Ryuo):
                event.EventSwitchLeave}
 
     def __init__(self, *args, **kwargs):
-        super(TopologyApp, self).__init__(args, kwargs)
+        super(TopologyApp, self).__init__(*args, **kwargs)
         self.switches = {}  # dpid -> switch
         self.links = {}
 

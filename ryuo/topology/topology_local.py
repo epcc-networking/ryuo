@@ -12,7 +12,7 @@ from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
 
 from ryuo.local.local_controller import LocalController
 from ryuo.topology.common import PortData, Port
-from ryuo.topology.topology_app import TopologyApp
+from ryuo.topology.app import TopologyApp
 
 
 class TopologyLocal(LocalController):
