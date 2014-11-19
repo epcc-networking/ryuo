@@ -19,7 +19,7 @@ class TopologyApp(Ryuo):
     def __init__(self, *args, **kwargs):
         super(TopologyApp, self).__init__(*args, **kwargs)
         self.switches = {}  # dpid -> switch
-        self.links = {}
+        self.links = {}  # src_dpid -> dst_dpid -> link
 
     @Pyro4.expose
     def switch_enter(self, dpid, ports_data):
@@ -44,8 +44,8 @@ class TopologyApp(Ryuo):
         self._logger.debug('Link request.')
         dpid = req.dpid
         if dpid is None:
-            links = [link for link in self.links[dpid].values() for dpid in
-                     self.links.keys()]
+            links = [link for src_dpid in self.links.keys() for link in
+                     self.links[src_dpid].values()]
         else:
             links = self.links[dpid].values()
         rep = event.EventLinkReply(req.src, dpid, links)
@@ -55,26 +55,30 @@ class TopologyApp(Ryuo):
     def port_added(self, port_data):
         self._logger.info('Port %d.%d comes up', port_data.dpid,
                           port_data.port_no)
+        self.switches[port_data.dpid].add_port(port_data)
         self.send_event_to_observers(event.EventPortAdd(Port(port_data)))
 
     @Pyro4.expose
     def port_deleted(self, port_data):
         self._logger.info('Port %d.%d deleted.', port_data.dpid,
                           port_data.port_no)
+        self.switches[port_data.dpid].del_port(port_data)
         self.send_event_to_observers(event.EventPortDelete(Port(port_data)))
 
     @Pyro4.expose
     def port_modified(self, port_data):
         self._logger.info('Port %d.%d modified.', port_data.dpid,
                           port_data.port_no)
+        self.switches[port_data.dpid].update_port(port_data)
         self.send_event_to_observers(event.EventPortModify(Port(port_data)))
 
     @Pyro4.expose
     def link_deleted(self, src_port_data, dst_port_data):
-        src_port = Port(src_port_data)
         try:
-            dst_port = self.switches[dst_port_data.dpid].ports[
-                dst_port_data.port_no]
+            src_port = self.switches[src_port_data.dpid].update_port(
+                src_port_data)
+            dst_port = self.switches[dst_port_data.dpid].update_port(
+                src_port_data)
             del self.links[src_port.dpid][dst_port.dpid]
             self._logger.info('Link %d.%d -> %d.%d down',
                               src_port_data.dpid,
@@ -92,10 +96,11 @@ class TopologyApp(Ryuo):
 
     @Pyro4.expose
     def link_added(self, src_port_data, dst_port_data):
-        src_port = Port(src_port_data)
         try:
-            dst_port = self.switches[dst_port_data.dpid].ports[
-                dst_port_data.port_no]
+            src_port = self.switches[src_port_data.dpid].update_port(
+                src_port_data)
+            dst_port = self.switches[dst_port_data.dpid].update_port(
+                dst_port_data)
             link = Link(src_port, dst_port)
             if src_port.dpid not in self.links.keys():
                 self.links[src_port.dpid] = {}

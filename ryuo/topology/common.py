@@ -12,13 +12,17 @@ class PortData(object):
     Passing port information between ryuo and ryu.
     """
 
-    def __init__(self, dpid, ofpport=None, ofproto=None, port_no=None):
+    def __init__(self, dpid, ofpport=None, ofproto=None, port_no=None,
+                 hw_addr=None):
         super(PortData, self).__init__()
         self.dpid = dpid
+
         self.port_no = port_no
+        self.hw_addr = hw_addr
         self.ofpport = None
         if ofpport:
             self.port_no = ofpport.port_no
+            self.hw_addr = ofpport.hw_addr
             self.ofpport = ofpport
             self.OFPP_MAX = ofproto.OFPP_MAX
             self.OFPPS_LINK_DOWN = ofproto.OFPPS_LINK_DOWN
@@ -38,10 +42,13 @@ class Port(object):
         self.dpid = port_data.dpid
 
         self.port_no = port_data.port_no
+        self.hw_addr = port_data.hw_addr
 
         if port_data.ofpport:
             self.hw_addr = port_data.ofpport.hw_addr
             self.name = port_data.ofpport.name
+        else:
+            self.name = "N/A"
 
         self.port_data = port_data
 
@@ -92,9 +99,20 @@ class Switch(object):
         port = Port(port_data)
         if not port.is_reserved():
             self.ports[port.port_no] = port
+        return port
+
+    def update_port(self, port_data):
+        port = self.ports[port_data.port_no]
+        if port_data.ofpport is None:
+            port_data.ofpport = port.port_data.ofpport
+        port.port_data = port_data
+        port.hw_addr = port_data.hw_addr
+        return port
 
     def del_port(self, port_data):
+        port = self.ports[port_data.port_no]
         del self.ports[port_data.port_no]
+        return port
 
     def to_dict(self):
         return {'dpid': dpid_to_str(self.dpid),

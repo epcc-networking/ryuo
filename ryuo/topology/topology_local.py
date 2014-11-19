@@ -4,13 +4,13 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
 from ryu.lib.mac import DONTCARE_STR
-from ryu.lib.packet import lldp
+from ryu.lib.packet import lldp, packet
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 from ryu.ofproto.ether import ETH_TYPE_LLDP
 from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
 
+from ryuo.constants import ETHERNET
 from ryuo.topology import event
-
 from ryuo.local.local_controller import LocalController
 from ryuo.topology.common import PortData, Port
 from ryuo.topology.app import TopologyApp
@@ -224,6 +224,10 @@ class TopologyLocal(LocalController):
     def packet_in_handler(self, ev):
         msg = ev.msg
         ofp = msg.datapath.ofproto
+        pkt = packet.Packet(msg.data)
+        headers = dict((p.protocol_name, p)
+                       for p in pkt.protocols if type(p) != str)
+        src_mac = headers[ETHERNET].src
         try:
             src_dpid, src_port_no = LLDPPacket.lldp_parse(msg.data)
         except LLDPPacket.LLDPUnknownFormat as e:
@@ -245,7 +249,7 @@ class TopologyLocal(LocalController):
             self._logger.warning('Dst not found.')
             return
         self.ports.lldp_received(dst)
-        src = Port(PortData(src_dpid, port_no=src_port_no))
+        src = Port(PortData(src_dpid, port_no=src_port_no, hw_addr=src_mac))
         old_peer = self.links.get_peer(dst)
         if old_peer and old_peer != src:
             self._logger.info('Peer changed.')
