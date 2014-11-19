@@ -27,7 +27,8 @@ class LocalController(app_manager.RyuApp):
         self._rpc_thread = None
         self.uri = None
         self.ryuo_name = kwargs.get('ryuo_name', CENTRAL_HOST_NAME)
-        self.name = None
+        self.app_name = None
+        self.name = self.__class__.__name__
 
         self._rpc_daemon = Pyro4.Daemon()
         self.uri = self._rpc_daemon.register(self)
@@ -49,8 +50,8 @@ class LocalController(app_manager.RyuApp):
         self._rpc_daemon.requestLoop()
 
     def _switch_enter(self, dp):
-        self.name = "%s-%d" % (self.__class__.__name__, dp.id)
-        self._ns.register(self.name, self.uri)
+        self.app_name = "%s-%d" % (self.__class__.__name__, dp.id)
+        self._ns.register(self.app_name, self.uri)
         self._setup_logger(dp.id)
         self.dp = dp
         self.ofctl = OfCtl(dp, self._logger)
@@ -60,8 +61,8 @@ class LocalController(app_manager.RyuApp):
 
     def _switch_leave(self):
         self.ryuo.ryuo_switch_leave(self.dp.id, self.uri)
-        self._ns.remove(self.name)
-        self.name = None
+        self._ns.remove(self.app_name)
+        self.app_name = None
         self.ofctl = None
         self.dp = None
 

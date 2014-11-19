@@ -4,7 +4,7 @@ from ryu.topology.switches import Link
 
 from ryuo.controller.central import Ryuo
 from ryuo.topology import event
-from ryuo.topology.common import Switch, Port
+from ryuo.topology.common import Switch
 
 
 class TopologyApp(Ryuo):
@@ -55,22 +55,22 @@ class TopologyApp(Ryuo):
     def port_added(self, port_data):
         self._logger.info('Port %d.%d comes up', port_data.dpid,
                           port_data.port_no)
-        self.switches[port_data.dpid].add_port(port_data)
-        self.send_event_to_observers(event.EventPortAdd(Port(port_data)))
+        port = self.switches[port_data.dpid].add_port(port_data)
+        self.send_event_to_observers(event.EventPortAdd(port))
 
     @Pyro4.expose
     def port_deleted(self, port_data):
         self._logger.info('Port %d.%d deleted.', port_data.dpid,
                           port_data.port_no)
-        self.switches[port_data.dpid].del_port(port_data)
-        self.send_event_to_observers(event.EventPortDelete(Port(port_data)))
+        port = self.switches[port_data.dpid].del_port(port_data)
+        self.send_event_to_observers(event.EventPortDelete(port))
 
     @Pyro4.expose
     def port_modified(self, port_data):
         self._logger.info('Port %d.%d modified.', port_data.dpid,
                           port_data.port_no)
-        self.switches[port_data.dpid].update_port(port_data)
-        self.send_event_to_observers(event.EventPortModify(Port(port_data)))
+        port = self.switches[port_data.dpid].update_port(port_data)
+        self.send_event_to_observers(event.EventPortModify(port))
 
     @Pyro4.expose
     def link_deleted(self, src_port_data, dst_port_data):

@@ -1,7 +1,7 @@
 import time
 
 import Pyro4
-from ryu.controller import ofp_event, handler
+from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls
 from ryu.lib.packet import packet
 from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
@@ -14,19 +14,16 @@ from ryu.lib import hub
 
 from ryuo.kf_routing.app import KFRoutingApp
 from ryuo.topology.event import EventPortDelete, EventPortAdd, \
-    EventPortModify, \
-    EventLinkAdd, EventLinkDelete
-
+    EventPortModify, EventLinkAdd, EventLinkDelete
 from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, \
-    PORT_UP, \
-    ARP
+    PORT_UP, ARP
 from ryuo.local.local_controller import LocalController
 from ryuo.config import ARP_EXPIRE_SECOND
-from ryuo.utils import mask_ntob, nw_addr_aton, ipv4_apply_mask, ip_addr_ntoa
+from ryuo.utils import nw_addr_aton, ipv4_apply_mask, ip_addr_ntoa
 
 
 class KFRoutingLocal(LocalController):
@@ -49,17 +46,7 @@ class KFRoutingLocal(LocalController):
         self._install_routing_entry(route)
 
     @Pyro4.expose
-    def set_port_address(self, ip_str, port_no):
-        nw, mask, ip = nw_addr_aton(ip_str)
-        # Check overlaps
-        mask_b = mask_ntob(mask)
-        for port in self.ports.values():
-            if port.ip is None:
-                continue
-            port_mask = mask_ntob(port.netmask)
-            if (port.nw == ipv4_apply_mask(ip, port.netmask)
-                or nw == ipv4_apply_mask(port.ip, mask)):
-                return None
+    def set_port_address(self, port_no, ip, mask, nw):
         if port_no not in self.ports.keys():
             return None
         self.ports[port_no].set_ip(nw, mask, ip)
@@ -121,15 +108,15 @@ class KFRoutingLocal(LocalController):
                     return self._packet_in_tcp_udp(msg, headers)
             return self._packet_in_to_node(msg, headers)
 
-    @handler.set_ev_cls(EventPortDelete)
+    @set_ev_cls(EventPortDelete)
     def _on_port_deleted(self, ev):
         del self.ports[ev.port.port_no]
 
-    @handler.set_ev_cls(EventPortAdd)
+    @set_ev_cls(EventPortAdd)
     def _on_port_added(self, ev):
         self.ports[ev.port.port_no] = _Port(ev.port.port_no, ev.port.hw_addr)
 
-    @handler.set_ev_cls(EventPortModify)
+    @set_ev_cls(EventPortModify)
     def _on_port_modified(self, ev):
         port = ev.port
         if port.is_down():
@@ -137,7 +124,7 @@ class KFRoutingLocal(LocalController):
         else:
             self.ports[port.port_no].up()
 
-    @handler.set_ev_cls(EventLinkAdd)
+    @set_ev_cls(EventLinkAdd)
     def _on_link_added(self, ev):
         dst_port_no = ev.link.dst.port_no
         peer_mac = ev.link.src.hw_addr
@@ -147,7 +134,7 @@ class KFRoutingLocal(LocalController):
             pass
         self.ports[dst_port_no].set_peer_mac(peer_mac)
 
-    @handler.set_ev_cls(EventLinkDelete)
+    @set_ev_cls(EventLinkDelete)
     def _on_link_deleted(self, ev):
         pass
 
@@ -177,15 +164,15 @@ class KFRoutingLocal(LocalController):
                                     in_port=route.in_port,
                                     out_group=route.out_group)
 
-    def _register(self, dp):
+    def _switch_enter(self, dp):
         super(KFRoutingLocal, self)._switch_enter(dp)
-        for ofpport in dp.ports:
+        for ofpport in dp.ports.values():
             self.ports[ofpport.port_no] = _Port(ofpport.port_no,
                                                 ofpport.hw_addr)
         self.groups = _GroupTable(self.ofctl, self.ports)
         self.routing_table.clear()
 
-    def _unregister(self):
+    def _switch_leave(self):
         super(KFRoutingLocal, self)._switch_leave()
         self.groups = None
         self.arp_table.clear()

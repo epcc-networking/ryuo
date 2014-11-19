@@ -67,7 +67,8 @@ if __name__ == '__main__':
     RyuoOVSSwitch.setup()
     setLogLevel('debug')
 
-    local_apps = 'ryuo.topology.topology_local'
+    local_apps = 'ryuo.kf_routing.kf_routing_local ' \
+                 'ryuo.topology.topology_local'
 
     net = Mininet(topo=RyuoTestingTopo(local_apps),
                   switch=RyuoOVSSwitch,
