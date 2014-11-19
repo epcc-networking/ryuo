@@ -47,12 +47,12 @@ class Router():
         self._logger.info('Setting IP %s/%d of %s', ip, mask, nw)
 
         priority, dummy = get_priority(PRIORITY_MAC_LEARNING)
-        self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
+        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=nw, dst_mask=mask)
         self._logger.info('Set MAC learning for %s', ip)
         # IP handling
         priority, dummy = get_priority(PRIORITY_IP_HANDLING)
-        self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
+        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=ip)
         self._logger.info('Set IP handling for %s', ip)
         # L2 switching
@@ -199,7 +199,7 @@ class Router():
         self.ofctl.set_sw_config_for_ttl()
         # ARP
         priority, dummy = get_priority(PRIORITY_ARP_HANDLING)
-        self.ofctl.set_packetin_flow(cookie, priority,
+        self.ofctl.set_packet_in_flow(cookie, priority,
                                      dl_type=ether.ETH_TYPE_ARP)
         # Drop by default 
         priority, dummy = get_priority(PRIORITY_DEFAULT_ROUTING)
@@ -220,7 +220,7 @@ class Router():
             self._logger.info('Src %s is unknown, learning its mac',
                               headers[ARP].src_ip)
             self._learning_host_mac(msg, headers)
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = headers[ARP].src_ip
         dst_ip = headers[ARP].dst_ip
         self._logger.info('Receive ARP form %s to %s', src_ip, dst_ip)
@@ -260,7 +260,7 @@ class Router():
         srcip = ip_addr_ntoa(headers[IPV4].src)
         self._logger.info('Receive invalid ttl packet from %s', srcip)
 
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = self.ports[in_port].ip
         if src_ip == srcip:
             self._logger.info('Invalid packet from my self.')
@@ -276,7 +276,7 @@ class Router():
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
             self._logger.info('Suspend pakcet drop')
             return
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = headers[IPV4].src
         dst_ip = headers[IPV4].dst
         port = self.ports.get_by_ip(dst_ip)
@@ -302,19 +302,19 @@ class Router():
 
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         self.ofctl.send_icmp(in_port, headers, ICMP_ECHO_REPLY,
                              ICMP_ECHO_REPLY_CODE,
                              icmp_data=headers[ICMP].data)
 
     def _packet_in_tcp_udp(self, msg, headers):
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         self.ofctl.send_icmp(in_port, headers, ICMP_DEST_UNREACH,
                              ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
 
     def _learning_host_mac(self, msg, header_list):
         # Set flow: routing to internal Host.
-        out_port = self.ofctl.get_packetin_inport(msg)
+        out_port = self.ofctl.get_packet_in_inport(msg)
         src_mac = header_list[ARP].src_mac
         dst_mac = self.ports[out_port].mac
         src_ip = header_list[ARP].src_ip

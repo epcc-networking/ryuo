@@ -17,10 +17,9 @@
 import logging
 import socket
 import struct
-
 import json
-from webob import Response
 
+from webob import Response
 from ryu.app.wsgi import ControllerBase
 from ryu.app.wsgi import WSGIApplication
 from ryu.base import app_manager
@@ -48,6 +47,7 @@ from ryu.ofproto import ofproto_v1_0
 from ryu.ofproto import ofproto_v1_2
 from ryu.ofproto import ofproto_v1_3
 from ryu.topology.api import get_all_switch, get_all_link
+
 
 
 # =============================
@@ -602,7 +602,7 @@ class Router(dict):
 
         # Set flow: ARP handling (packet in)
         priority = get_priority(PRIORITY_ARP_HANDLING)
-        ofctl.set_packetin_flow(cookie, priority, dl_type=ether.ETH_TYPE_ARP)
+        ofctl.set_packet_in_flow(cookie, priority, dl_type=ether.ETH_TYPE_ARP)
         self.logger.info('Set ARP handling (packet in) flow [cookie=0x%x]',
                          cookie, extra=self.sw_id)
 
@@ -870,7 +870,7 @@ class VlanRouter(object):
 
         # Set flow: host MAC learning (packet in)
         priority = self._get_priority(PRIORITY_MAC_LEARNING)
-        self.ofctl.set_packetin_flow(cookie, priority,
+        self.ofctl.set_packet_in_flow(cookie, priority,
                                      dl_type=ether.ETH_TYPE_IP,
                                      dl_vlan=self.vlan_id,
                                      dst_ip=address.nw_addr,
@@ -880,7 +880,7 @@ class VlanRouter(object):
 
         # set Flow: IP handling(PacketIn)
         priority = self._get_priority(PRIORITY_IP_HANDLING)
-        self.ofctl.set_packetin_flow(cookie, priority,
+        self.ofctl.set_packet_in_flow(cookie, priority,
                                      dl_type=ether.ETH_TYPE_IP,
                                      dl_vlan=self.vlan_id,
                                      dst_ip=address.default_gw)
@@ -958,7 +958,7 @@ class VlanRouter(object):
         cookie = self._id_to_cookie(REST_ROUTEID, route.route_id)
         priority, log_msg = self._get_priority(PRIORITY_TYPE_ROUTE,
                                                route=route)
-        self.ofctl.set_packetin_flow(cookie, priority,
+        self.ofctl.set_packet_in_flow(cookie, priority,
                                      dl_type=ether.ETH_TYPE_IP,
                                      dl_vlan=self.vlan_id,
                                      dst_ip=route.dst_ip,
@@ -1150,7 +1150,7 @@ class VlanRouter(object):
             self._learning_host_mac(msg, header_list)
 
         # ARP packet handling.
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = header_list[ARP].src_ip
         dst_ip = header_list[ARP].dst_ip
         srcip = ip_addr_ntoa(src_ip)
@@ -1217,7 +1217,7 @@ class VlanRouter(object):
 
     def _packetin_icmp_req(self, msg, header_list):
         # Send ICMP echo reply.
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         self.ofctl.send_icmp(in_port, header_list, self.vlan_id,
                              icmp.ICMP_ECHO_REPLY,
                              icmp.ICMP_ECHO_REPLY_CODE,
@@ -1232,7 +1232,7 @@ class VlanRouter(object):
 
     def _packetin_tcp_udp(self, msg, header_list):
         # Send ICMP port unreach error.
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         self.ofctl.send_icmp(in_port, header_list, self.vlan_id,
                              icmp.ICMP_DEST_UNREACH,
                              icmp.ICMP_PORT_UNREACH_CODE,
@@ -1252,7 +1252,7 @@ class VlanRouter(object):
             return
 
         # Send ARP request to get node MAC address.
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = None
         dst_ip = header_list[IPV4].dst
         srcip = ip_addr_ntoa(header_list[IPV4].src)
@@ -1287,7 +1287,7 @@ class VlanRouter(object):
         self.logger.info('Receive invalid ttl packet from [%s].', srcip,
                          extra=self.sw_id)
 
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = self._get_send_port_ip(header_list)
         if src_ip is not None:
             self.ofctl.send_icmp(in_port, header_list, self.vlan_id,
@@ -1353,7 +1353,7 @@ class VlanRouter(object):
 
     def _update_routing_tbl(self, msg, header_list):
         # Set flow: routing to gateway.
-        out_port = self.ofctl.get_packetin_inport(msg)
+        out_port = self.ofctl.get_packet_in_inport(msg)
         src_mac = header_list[ARP].src_mac
         dst_mac = self.port_data[out_port].mac
         src_ip = header_list[ARP].src_ip
@@ -1382,7 +1382,7 @@ class VlanRouter(object):
 
     def _learning_host_mac(self, msg, header_list):
         # Set flow: routing to internal Host.
-        out_port = self.ofctl.get_packetin_inport(msg)
+        out_port = self.ofctl.get_packet_in_inport(msg)
         src_mac = header_list[ARP].src_mac
         dst_mac = self.port_data[out_port].mac
         src_ip = header_list[ARP].src_ip
@@ -2122,8 +2122,6 @@ def mask_ntob(mask, err_msg=None):
 
 
 def ipv4_apply_mask(address, prefix_len, err_msg=None):
-    import itertools
-
     assert isinstance(address, str)
     address_int = ipv4_text_to_int(address)
     return ipv4_int_to_text(address_int & mask_ntob(prefix_len, err_msg))

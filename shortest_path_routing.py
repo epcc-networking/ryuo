@@ -111,7 +111,7 @@ class ShortestPathRouting(Routing):
 
     def update_mac(self, router, msg, headers):
         # Set flow: routing to gateway.
-        out_port = router.ofctl.get_packetin_inport(msg)
+        out_port = router.ofctl.get_packet_in_inport(msg)
         src_mac = headers[ARP].src_mac
         dst_mac = router.ports[out_port].mac
         src_ip = headers[ARP].src_ip

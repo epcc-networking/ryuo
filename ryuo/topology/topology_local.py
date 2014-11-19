@@ -231,7 +231,7 @@ class TopologyLocal(LocalController):
         try:
             src_dpid, src_port_no = LLDPPacket.lldp_parse(msg.data)
         except LLDPPacket.LLDPUnknownFormat as e:
-            self._logger.error('LLDPUnknownFormat %s', e)
+            self._logger.debug('LLDPUnknownFormat %s', e)
             return
         dst_port_no = None
         if ofp.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:

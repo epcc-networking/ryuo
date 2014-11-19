@@ -23,7 +23,7 @@ from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PORT_UP, ARP
 from ryuo.local.local_controller import LocalController
 from ryuo.config import ARP_EXPIRE_SECOND
-from ryuo.utils import nw_addr_aton, ipv4_apply_mask, ip_addr_ntoa
+from ryuo.utils import nw_addr_aton, ipv4_apply_mask
 
 
 class KFRoutingLocal(LocalController):
@@ -31,19 +31,22 @@ class KFRoutingLocal(LocalController):
         kwargs['ryuo_name'] = KFRoutingApp.__name__
         super(KFRoutingLocal, self).__init__(*args, **kwargs)
         self.ports = _Ports()  # port_no -> Port
-        self.arp_table = _ArpTable()
+        self.arp_table = None
         self.groups = None
-        self.routing_table = _RoutingTable(self._logger)
+        self.routing_table = None
         self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
 
     @Pyro4.expose
     def add_route(self, dst_ip, in_port, output_ports):
-        group = self.groups.add_entry(output_ports)
+        group = self.groups.add_entry(output_ports, in_port)
+        group.install()
         route = self.routing_table.add_entry(dst_ip=dst_ip,
                                              in_port=in_port,
                                              out_group=group.id)
         self._install_routing_entry(route)
+        self._logger.info('Route to %s from port %d to ports %s',
+                          dst_ip, in_port, str(output_ports))
 
     @Pyro4.expose
     def set_port_address(self, port_no, ip, mask, nw):
@@ -53,12 +56,12 @@ class KFRoutingLocal(LocalController):
         self._logger.info('Setting IP %s/%d of %s', ip, mask, nw)
 
         priority, dummy = _get_priority(PRIORITY_MAC_LEARNING)
-        self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
+        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=nw, dst_mask=mask)
         self._logger.info('Set MAC learning for %s', ip)
         # IP handling
         priority, dummy = _get_priority(PRIORITY_IP_HANDLING)
-        self.ofctl.set_packetin_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
+        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                      dst_ip=ip)
         self._logger.info('Set IP handling for %s', ip)
         # L2 switching
@@ -96,6 +99,7 @@ class KFRoutingLocal(LocalController):
         headers = dict((p.protocol_name, p)
                        for p in pkt.protocols if type(p) != str)
         ofproto = self.dp.ofproto
+        self._logger.debug('Packet in.')
         if msg.reason == ofproto.OFPR_INVALID_TTL:
             return self._packet_in_invalid_ttl(msg, headers)
         if ARP in headers:
@@ -141,7 +145,7 @@ class KFRoutingLocal(LocalController):
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
 
-    def init_switch(self):
+    def _init_switch(self):
         cookie = 0
         self.ofctl.set_sw_config_for_ttl()
         priority, dummy = _get_priority(PRIORITY_ARP_HANDLING)
@@ -157,7 +161,7 @@ class KFRoutingLocal(LocalController):
         priority, dummy = _get_priority(PRIORITY_TYPE_ROUTE, route=route)
         self.ofctl.set_routing_flow(0,
                                     priority,
-                                    route.out_port,
+                                    None,
                                     nw_dst=route.dst_ip,
                                     dst_mask=route.netmask,
                                     dec_ttl=True,
@@ -170,19 +174,22 @@ class KFRoutingLocal(LocalController):
             self.ports[ofpport.port_no] = _Port(ofpport.port_no,
                                                 ofpport.hw_addr)
         self.groups = _GroupTable(self.ofctl, self.ports)
-        self.routing_table.clear()
+        self.routing_table = _RoutingTable(self._logger)
+        self.arp_table = _ArpTable(self._logger)
+        self._init_switch()
 
     def _switch_leave(self):
         super(KFRoutingLocal, self)._switch_leave()
         self.groups = None
-        self.arp_table.clear()
+        self.arp_table = None
+        self.routing_table = None
 
     def _packet_in_arp(self, msg, headers):
         src_port = self.ports.get_by_ip(headers[ARP].src_ip)
         if src_port is None:
             return
         self._learn_host_mac(msg, headers)
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = headers[ARP].src_ip
         dst_ip = headers[ARP].dst_ip
         self._logger.info('Receive ARP from %s to %s', src_ip, dst_ip)
@@ -211,7 +218,7 @@ class KFRoutingLocal(LocalController):
 
     def _learn_host_mac(self, msg, headers):
         # TODO: Only install flow when ARP table changed
-        out_port = self.ofctl.get_packetin_inport(msg)
+        out_port = self.ofctl.get_packet_in_inport(msg)
         src_mac = headers[ARP].src_mac
         dst_mac = self.ports[out_port].mac
         src_ip = headers[ARP].src_ip
@@ -230,7 +237,7 @@ class KFRoutingLocal(LocalController):
     def _packet_in_invalid_ttl(self, msg, headers):
         src_ip = headers[IPV4].src
         self._logger('Received packet with invalid ttl from %s.', src_ip)
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         in_ip = self.ports[in_port].ip
         if src_ip in self.get_ips():
             self._logger.warning(
@@ -249,7 +256,7 @@ class KFRoutingLocal(LocalController):
 
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         self.ofctl.send_icmp(in_port,
                              headers,
                              ICMP_ECHO_REPLY,
@@ -257,7 +264,7 @@ class KFRoutingLocal(LocalController):
                              icmp_data=headers[ICMP].data)
 
     def _packet_in_tcp_udp(self, msg, headers):
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         self.ofctl.send_icmp(in_port,
                              headers,
                              ICMP_DEST_UNREACH,
@@ -268,7 +275,7 @@ class KFRoutingLocal(LocalController):
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
             self._logger.warning('Suspend packet drop.')
             return
-        in_port = self.ofctl.get_packetin_inport(msg)
+        in_port = self.ofctl.get_packet_in_inport(msg)
         dst_ip = headers[IPV4].dst
         port = self.ports.get_by_ip(dst_ip)
         if port is not None:
@@ -345,8 +352,9 @@ class _ArpEntry(object):
 
 
 class _ArpTable(dict):
-    def __init__(self):
+    def __init__(self, logger):
         super(_ArpTable, self).__init__()
+        self._logger = logger
 
     def __getitem__(self, item):
         entry = super(_ArpTable, self).__getitem__(item)
@@ -362,6 +370,7 @@ class _ArpTable(dict):
 
     def add_entry(self, ip, mac):
         self[ip] = _ArpEntry(ip, mac)
+        self._logger.info('Arp entry added: %s %s.', ip, mac)
 
 
 def _get_priority(priority_type, vid=0, route=None):
@@ -451,8 +460,8 @@ class _Group(object):
         ofctl = self.group_table.ofctl
         ports = self.group_table.ports
         output_ports = [
-            port_no if port_no != self.inport else ofctl.dp.ofproto.OFPP_INPORT
-            for port_no in self.output_ports]
+            port_no if port_no != self.inport else
+            ofctl.dp.ofproto.OFPP_IN_PORT for port_no in self.output_ports]
         src_macs = [ports[port_no].mac for port_no in self.output_ports]
         dst_macs = [ports[port_no].peer_mac for port_no in self.output_ports]
         ofctl.set_failover_group(self.id, self.watch_ports, output_ports,
@@ -498,11 +507,10 @@ class _RoutingTable(dict):
         self.route_id = 0
 
     def add_entry(self, dst_ip, in_port, out_group):
-        dst, netmask, dummy = nw_addr_aton(dst_ip)
-        ip_str = ip_addr_ntoa(dst)
-        key = '%s/%d' % (ip_str, netmask)
+        dst, netmask, ip_str = nw_addr_aton(dst_ip)
+        key = '%d:%s/%d' % (in_port, dst, netmask)
         if key in self:
-            self._logger.warning('Routing entry overlapped')
+            self._logger.error('Route %s overlapped.', key)
         routing_data = _Route(route_id=self.route_id,
                               dst_ip=dst,
                               netmask=netmask,

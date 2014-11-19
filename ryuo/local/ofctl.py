@@ -29,7 +29,7 @@ class OfCtl(object):
         actions = [self.dp.ofproto_parser.OFPActionOutput(out_port, 0)]
         self.set_flow(cookie, priority, actions=actions)
 
-    def get_packetin_inport(self, msg):
+    def get_packet_in_inport(self, msg):
         in_port = self.dp.ofproto.OFPP_ANY
         for match_field in msg.match.fields:
             if match_field.header == self.dp.ofproto.OXM_OF_IN_PORT:
@@ -125,7 +125,7 @@ class OfCtl(object):
                                   ofp.OFPG_ANY, 0, match, inst)
         self.dp.send_msg(m)
 
-    def set_packetin_flow(self, cookie, priority, dl_type=0, dl_dst=0,
+    def set_packet_in_flow(self, cookie, priority, dl_type=0, dl_dst=0,
                           dl_vlan=0, dst_ip=0, dst_mask=32, nw_proto=0):
         miss_send_len = UINT16_MAX
         actions = [self.dp.ofproto_parser.OFPActionOutput(
