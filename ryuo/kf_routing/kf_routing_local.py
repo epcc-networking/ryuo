@@ -217,7 +217,8 @@ class KFRoutingLocal(LocalController):
                                                suspend_packet.data)
 
     def _learn_host_mac(self, msg, headers):
-        # TODO: Only install flow when ARP table changed
+        # TODO: Only install flow when ARP table changed.
+        # TODO: Better Arp Table management.
         out_port = self.ofctl.get_packet_in_inport(msg)
         src_mac = headers[ARP].src_mac
         dst_mac = self.ports[out_port].mac
@@ -230,7 +231,7 @@ class KFRoutingLocal(LocalController):
                                     src_mac=dst_mac,
                                     dst_mac=src_mac,
                                     nw_dst=src_ip,
-                                    idle_timeout=ARP_EXPIRE_SECOND,
+                                    # idle_timeout=ARP_EXPIRE_SECOND,
                                     dec_ttl=True)
         self._logger.info('Set implicit routing flow to %s', src_ip)
 
@@ -355,11 +356,6 @@ class _ArpTable(dict):
     def __init__(self, logger):
         super(_ArpTable, self).__init__()
         self._logger = logger
-
-    def __getitem__(self, item):
-        entry = super(_ArpTable, self).__getitem__(item)
-        if entry is not None and not entry.is_expired():
-            return entry
 
     def get(self, k, d=None):
         if k in self.keys():

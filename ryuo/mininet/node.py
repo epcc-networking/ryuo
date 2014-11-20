@@ -8,11 +8,11 @@ class RyuoOVSSwitch(OVSSwitch):
 
     def __init__(self, name, failMode='secure', datapath='kernel',
                  inband=False, protocols=None,
-                 controller_working_dir='', ryu_args=None, **params):
+                 controller_dir='', ryu_args=None, **params):
         super(RyuoOVSSwitch, self).__init__(name, failMode, datapath, inband,
                                             protocols, **params)
         self.controller = RyuoLocalController('%s-ryu' % name,
-                                              controller_working_dir,
+                                              controller_dir,
                                               *ryu_args,
                                               **params)
 

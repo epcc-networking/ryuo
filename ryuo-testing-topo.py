@@ -42,7 +42,7 @@ class RyuoTestingTopo(Topo):
         working_dir = '/home/zsy/Projects/resilient'
 
         s = [self.addSwitch('s%d' % (i + 1),
-                            controller_working_dir=working_dir,
+                            controller_dir=working_dir,
                             ryu_args=ryu_args,
                             port=6634 + i,
                             protocols=OFP) for i in range(0, 6)]
