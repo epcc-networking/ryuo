@@ -1,15 +1,10 @@
-#!/usr/bin/env bash
-function handle_signit()
-{
-    for proc in $(jobs -p)
-    do
-        kill $proc
-    done
-}
+#!/usr/bin/env python2
+import os
+import subprocess
 
-trap handle_sigint SIGINT
-
-PYRO_SERIALIZERS_ACCEPTED=serpent,pickle python2 -m Pyro4.naming -n localhost &
-
-wait
+if __name__ == '__main__':
+    env = os.environ
+    env['PYRO_SERIALIZERS_ACCEPTED'] = 'serpent,pickle'
+    ryuo_ns = subprocess.call(
+        ['python2', '-m', 'Pyro4.naming', '-n', 'localhost'], env=env)
 

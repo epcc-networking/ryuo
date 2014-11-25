@@ -1,5 +1,6 @@
 #!/usr/bin/env python2
 import subprocess
+import time
 
 from mininet.link import TCLink
 from mininet.net import Mininet
@@ -16,12 +17,12 @@ def on_topology(topology_gml_file):
     mn_c = subprocess.Popen(['mn', '-c'])
     mn_c.wait()
     # Run Ryuo name server
-    ryuo_ns = subprocess.Popen(
-        ['bash', '/home/zsy/Projects/resilient/ryuo-ns'],
-        cwd=working_dir)
+    ryuo_ns = subprocess.Popen(['/home/zsy/Projects/resilient/ryuo-ns'])
+    time.sleep(3)
     # Run Ryuo app
-    ryuo_app = subprocess.Popen(['ryu-manager', 'ryuo.topology.topology_app'],
-                                cwd=working_dir)
+    ryuo_app = subprocess.Popen(['ryu-manager', 'ryuo.topology.app'],
+                                cwd=working_dir, stdout=subprocess.PIPE)
+    time.sleep(4)
     net = Mininet(topo=RyuoTopoFromTopoZoo(topology_gml_file,
                                            'OpenFlow13',
                                            working_dir,
@@ -30,7 +31,7 @@ def on_topology(topology_gml_file):
                   controller=RemoteController,
                   link=TCLink)
     net.start()
-    print 'OK'
+    time.sleep(10)
     net.stop()
     ryuo_app.kill()
     ryuo_ns.kill()

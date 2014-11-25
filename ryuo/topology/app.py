@@ -51,6 +51,17 @@ class TopologyApp(Ryuo):
         rep = event.EventLinkReply(req.src, dpid, links)
         self.reply_to_request(req, rep)
 
+    @set_ev_cls(event.EventSwitchRequest)
+    def switch_request_handler(self, req):
+        self._logger.debug('Switch request')
+        dpid = req.dpid
+        if dpid is None:
+            switches = self.switches
+        else:
+            switches = [self.switches[dpid]]
+        rep = event.EventSwitchReply(req.src, switches)
+        self.reply_to_request(req, rep)
+
     @Pyro4.expose
     def port_added(self, port_data):
         self._logger.info('Port %d.%d comes up', port_data.dpid,

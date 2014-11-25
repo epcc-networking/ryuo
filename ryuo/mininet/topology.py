@@ -3,8 +3,6 @@ import math
 from mininet.topo import Topo
 import networkx
 
-from ryuo.utils import int_to_dpid
-
 
 class RyuoTopoFromTopoZoo(Topo):
     """
@@ -68,8 +66,7 @@ class RyuoTopoFromTopoZoo(Topo):
                      delay='%dms' % self._get_latency(node1, node2))
 
     def _add_switch(self, node, controller_dir, ryu_args, protocols):
-        return self.addSwitch(node['label'].encode('utf8'),
-                              dpid=int_to_dpid(node['id']),
+        return self.addSwitch('s-%d' % node['id'],
                               controller_dir=controller_dir,
                               ryu_args=ryu_args,
                               port=6634 + node['id'],
