@@ -52,6 +52,7 @@ class LocalController(app_manager.RyuApp):
     def _switch_enter(self, dp):
         self.app_name = "%s-%d" % (self.__class__.__name__, dp.id)
         self._ns.register(self.app_name, self.uri)
+        self._ns._pyroRelease()
         self._setup_logger(dp.id)
         self.dp = dp
         self.ofctl = OfCtl(dp, self._logger)
