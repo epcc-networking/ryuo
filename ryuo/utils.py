@@ -85,3 +85,7 @@ def json_response(obj, status=200):
 
 def error_response(status, msg):
     return json_response(msg, status=status)
+
+
+def int_to_dpid(dpid):
+    return hex(dpid)[2:]

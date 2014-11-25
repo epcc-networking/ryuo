@@ -3,6 +3,8 @@ import math
 from mininet.topo import Topo
 import networkx
 
+from ryuo.utils import int_to_dpid
+
 
 class RyuoTopoFromTopoZoo(Topo):
     """
@@ -18,14 +20,16 @@ class RyuoTopoFromTopoZoo(Topo):
 
         graph = networkx.read_gml(gml_file)
 
-        switches = {node['id']: self._add_switch(node,
-                                                 controller_dir,
-                                                 ryu_args,
-                                                 protocols)
-                    for node in graph.node}
+        switches = {int(node['id']): self._add_switch(node,
+                                                      controller_dir,
+                                                      ryu_args,
+                                                      protocols)
+                    for node in graph.node.values()}
 
-        for link in graph.edge:
-            self._add_link(switches, link)
+        for node1 in graph.edge:
+            node2s = [node2 for node2 in graph.edge[node1] if node2 < node1]
+            for node2 in node2s:
+                self._add_link(switches, graph.node[node1], graph.node[node2])
 
     @staticmethod
     def _get_latency(node1, node2):
@@ -52,21 +56,20 @@ class RyuoTopoFromTopoZoo(Topo):
                    * 6378.137
         return (distance * 1000) / 197000
 
-    def _add_link(self, switches, link):
+    def _add_link(self, switches, node1, node2):
         """
         Convert link information to actual link parameters.
         :param switches:
         :param link:
         :return:
         """
-        sw1 = switches[link['source']]
-        sw2 = switches[link['target']]
-        self.addLink(sw1,
-                     sw2,
-                     delay='%dms' % self._get_latency(sw1, sw2))
+        self.addLink(switches[node1['id']],
+                     switches[node2['id']],
+                     delay='%dms' % self._get_latency(node1, node2))
 
     def _add_switch(self, node, controller_dir, ryu_args, protocols):
-        return self.addSwitch(node['label'],
+        return self.addSwitch(node['label'].encode('utf8'),
+                              dpid=int_to_dpid(node['id']),
                               controller_dir=controller_dir,
                               ryu_args=ryu_args,
                               port=6634 + node['id'],
