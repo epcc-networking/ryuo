@@ -15,8 +15,9 @@ from ryuo.topology.api import get_all_switch
 def deadline(seconds):
     def _real_dec(func):
         def warpper(*args, **kwargs):
-            func(*args, **kwargs)
+            res = func(*args, **kwargs)
             time.sleep(seconds)
+            return res
 
         return warpper
 
@@ -58,14 +59,14 @@ class Tester(Ryuo):
             test = self.pending.pop()
             test_name = '_'.join(test.split('_')[1:])
             self._logger.info('Starting test %s', test_name)
-            getattr(self, test)()
+            res = getattr(self, test)()
             verifier = getattr(self, 'verify_%s' % test_name, None)
             if verifier is None:
                 self._logger.info('No verifier for %s', test_name)
-            self.results[test_name] = verifier()
+            self.results[test_name] = verifier(res)
             cleaner = getattr(self, 'clean_%s' % test_name, None)
             if cleaner is not None:
-                cleaner()
+                cleaner(res)
             if self.results[test_name]:
                 self._logger.info('Test %s pass', test_name)
             else:
