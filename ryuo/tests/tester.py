@@ -14,12 +14,12 @@ from ryuo.topology.api import get_all_switch
 
 def deadline(seconds):
     def _real_dec(func):
-        def warpper(*args, **kwargs):
+        def wrapper(*args, **kwargs):
             res = func(*args, **kwargs)
             time.sleep(seconds)
             return res
 
-        return warpper
+        return wrapper
 
     return _real_dec
 
