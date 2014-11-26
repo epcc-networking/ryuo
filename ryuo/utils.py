@@ -3,14 +3,21 @@ import socket
 import struct
 import json
 
+import Pyro4
 from ryu.lib import addrconv
 from webob import Response
 
 from ryuo.constants import UINT32_MAX
 
 
+class UnixTimeStampFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        return "{0:.6f}".format(record.created)
+
+
 def config_logger(logger):
-    formatter = logging.Formatter('[%(name)s][%(levelname)s]: %(message)s')
+    formatter = UnixTimeStampFormatter(
+        '[%(name)s][%(levelname)s][%(asctime)s]: %(message)s')
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     logger.addHandler(handler)
@@ -89,3 +96,41 @@ def error_response(status, msg):
 
 def int_to_dpid(dpid):
     return hex(dpid)[2:]
+
+
+def lock_class(methodnames, lockfactory):
+    return lambda cls: make_threadsafe(cls, methodnames, lockfactory)
+
+
+def lock_method(method):
+    if getattr(method, '__is_locked', False):
+        raise TypeError("Method %r is already locked!" % method)
+
+    def locked_method(self, *arg, **kwarg):
+        with self._lock:
+            return method(self, *arg, **kwarg)
+
+    locked_method.__name__ = '%s(%s)' % ('lock_method', method.__name__)
+    locked_method.__is_locked = True
+    return locked_method
+
+
+def make_threadsafe(cls, methodnames, lockfactory):
+    init = cls.__init__
+
+    def newinit(self, *arg, **kwarg):
+        init(self, *arg, **kwarg)
+        self._lock = lockfactory()
+
+    cls.__init__ = newinit
+
+    for methodname in methodnames:
+        oldmethod = getattr(cls, methodname)
+        newmethod = lock_method(oldmethod)
+        setattr(cls, methodname, newmethod)
+
+    return cls
+
+
+def expose(func):
+    return Pyro4.expose(lock_method(func))

@@ -122,12 +122,14 @@ class TopologyLocal(LocalController):
         ofp = dp.ofproto
 
         if reason == ofp.OFPPR_ADD:
+            self._logger.info('Port %d added.', ofpport.port_no)
             port = Port(PortData(self.dp.id, ofpport, ofp))
             if not port.is_reserved():
                 self._port_added(port)
                 self._report_port_added(port)
                 self.lldp_event.set()
         elif reason == ofp.OFPPR_DELETE:
+            self._logger.info('Port %d deleted.', ofpport.port_no)
             port = self._get_port(ofpport.port_no)
             if port and not port.is_reserved():
                 del self.ports[Port(PortData(self.dp.id, ofpport))]
@@ -135,6 +137,7 @@ class TopologyLocal(LocalController):
                 self._link_down(port)
                 self.lldp_event.set()
         else:
+            self._logger.info('Port %d modified.', ofpport.port_no)
             port = self._get_port(ofpport.port_no)
             if port and not port.is_reserved():
                 port.modify(ofpport)

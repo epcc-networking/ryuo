@@ -1,4 +1,5 @@
 import logging
+from multiprocessing import Lock
 
 import Pyro4
 from ryu.base import app_manager
@@ -7,7 +8,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
 
-from ryuo.utils import config_logger
+from ryuo.utils import config_logger, lock_class
 from ryuo.config import CENTRAL_HOST_NAME
 from ryuo.local.ofctl import OfCtl
 
@@ -17,6 +18,7 @@ Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
 
 
+@lock_class([], Lock)
 class LocalController(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_2.OFP_VERSION,
                     ofproto_v1_3.OFP_VERSION]

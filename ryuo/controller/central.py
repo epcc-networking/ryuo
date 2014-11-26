@@ -1,5 +1,6 @@
 #!/usr/bin/env python2
 import logging
+from threading import Lock
 
 import Pyro4
 from ryu.base import app_manager
@@ -7,7 +8,7 @@ from ryu.controller import dpset
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 
-from ryuo.utils import config_logger
+from ryuo.utils import config_logger, lock_class, expose
 
 
 Pyro4.config.REQUIRE_EXPOSE = True
@@ -16,6 +17,7 @@ Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
 Pyro4.config.THREADPOOL_SIZE = 32
 
 
+@lock_class([], Lock)
 class Ryuo(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(Ryuo, self).__init__(*args, **kwargs)
@@ -32,20 +34,20 @@ class Ryuo(app_manager.RyuApp):
         config_logger(self._logger)
         self._logger.info('Starting')
 
-    @Pyro4.expose
+    @expose
     def ryuo_register(self, uri):
         self._logger.info("App with uri %s connected.", uri)
 
-    @Pyro4.expose
+    @expose
     def ryuo_unregister(self, uri):
         self._logger.info('App with uri %s leaves.', uri)
 
-    @Pyro4.expose
+    @expose
     def ryuo_switch_enter(self, dpid, uri):
         self._logger.info('Switch %d comes up on uri: %s', dpid, uri)
         self.local_apps[dpid] = Pyro4.Proxy(uri)
 
-    @Pyro4.expose
+    @expose
     def ryuo_switch_leave(self, dpid, uri):
         self._logger.info('Switch %d leaves on uri %s.', dpid, uri)
         del self.local_apps[dpid]

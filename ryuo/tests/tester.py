@@ -37,6 +37,7 @@ class Tester(Ryuo):
         for test in dir(self):
             if test.startswith('test_'):
                 self.pending.append(test)
+        self.pending = sorted(self.pending, reverse=True)
         self.test_thread = hub.spawn(self.run_tests)
         self.threads.append(self.test_thread)
 
@@ -66,6 +67,7 @@ class Tester(Ryuo):
             self.results[test_name] = verifier(res)
             cleaner = getattr(self, 'clean_%s' % test_name, None)
             if cleaner is not None:
+                self._logger.info('Clean up test %s...', test_name)
                 cleaner(res)
             if self.results[test_name]:
                 self._logger.info('Test %s pass', test_name)
