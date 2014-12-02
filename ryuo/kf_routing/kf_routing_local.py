@@ -1,6 +1,5 @@
 import time
 
-import Pyro4
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls
 from ryu.lib.packet import packet
@@ -23,7 +22,7 @@ from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PORT_UP, ARP
 from ryuo.local.local_controller import LocalController
 from ryuo.config import ARP_EXPIRE_SECOND
-from ryuo.utils import nw_addr_aton, ipv4_apply_mask
+from ryuo.utils import nw_addr_aton, ipv4_apply_mask, expose
 
 
 class KFRoutingLocal(LocalController):
@@ -37,7 +36,7 @@ class KFRoutingLocal(LocalController):
         self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
 
-    @Pyro4.expose
+    @expose
     def add_route(self, dst_ip, in_port, output_ports):
         group = self.groups.add_entry(output_ports, in_port)
         group.install()
@@ -48,7 +47,7 @@ class KFRoutingLocal(LocalController):
         self._logger.info('Route to %s from port %d to ports %s',
                           dst_ip, in_port, str(output_ports))
 
-    @Pyro4.expose
+    @expose
     def set_port_address(self, port_no, ip, mask, nw):
         if port_no not in self.ports.keys():
             return None

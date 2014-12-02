@@ -1,0 +1,57 @@
+#!/usr/bin/env python2
+import os
+import subprocess
+import argparse
+import time
+
+from mininet.cli import CLI
+from mininet.link import TCLink
+from mininet.net import Mininet
+from mininet.node import RemoteController
+
+from ryuo.mininet.node import RyuoOVSSwitch
+from ryuo.mininet.topology import RyuoTopoFromTopoZoo
+from ryuo.mininet.utils import assign_ip_to_switches, attach_host_to_switches
+from ryuo.tests.utils import add_addresses
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Create Mininet topology from gml file.')
+    parser.add_argument('-g', '--gml-file', help='GML topology description',
+                        action='store', required=True)
+    parser.add_argument('-o', '--openflow', help='OpenFlow version',
+                        action='store', default='OpenFlow13')
+    parser.add_argument('-l', '--local-apps', help='local ryu apps to run',
+                        action='store', nargs='+', required=True)
+    parser.add_argument('-d', '--local-app-dir', help='Location of local apps',
+                        action='store', default=os.getcwd())
+    parser.add_argument('-a', '--assign-ip', action='store_true',
+                        help="assign IPs to switch ports")
+    parser.add_argument('-e', '--end-hosts', action='store_true',
+                        help='attach host to each switch')
+    parser.add_argument('-c', '--ryuo-ip', action='store', default='127.0.0.1',
+                        help='IP address of Ryuo controller')
+
+    args = parser.parse_args()
+    RyuoOVSSwitch.setup()
+    subprocess.call(['mn', '-c'])
+    print args
+    net = Mininet(topo=RyuoTopoFromTopoZoo(args.gml_file,
+                                           args.openflow,
+                                           args.local_app_dir,
+                                           ' '.join(args.local_apps)),
+                  switch=RyuoOVSSwitch,
+                  controller=RemoteController,
+                  link=TCLink)
+    net_num = 1
+    ips = []
+    if args.assign_ip:
+        net_num, ips = assign_ip_to_switches(net_num, net, ips)
+    if args.assign_ip and args.end_hosts:
+        net_num, ips = attach_host_to_switches(net_num, net, ips)
+    net.start()
+    time.sleep(20)
+    add_addresses(ips, args.ryuo_ip)
+    CLI(net)
+    net.stop()

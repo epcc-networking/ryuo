@@ -1,5 +1,5 @@
 #!/usr/bin/env python2
-from address_utils import add_addresses
+from ryuo.tests.utils import add_addresses
 
 
 IP = '127.0.0.1'

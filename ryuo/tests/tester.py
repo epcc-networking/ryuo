@@ -41,8 +41,12 @@ class Tester(Ryuo):
         self.test_thread = hub.spawn(self.run_tests)
         self.threads.append(self.test_thread)
 
+    def on_all_apps_up(self):
+        pass
+
     def run_tests(self):
-        self.run_mininet()
+        self.setup_mininet()
+        self.net.start()
         up_switches = 0
         total_switches = len(self.net.switches)
         while up_switches != total_switches:
@@ -50,6 +54,7 @@ class Tester(Ryuo):
                               up_switches, total_switches)
             up_switches = len(get_all_switch(self))
             time.sleep(5)
+        self.on_all_apps_up()
         self._logger.info('Tests begins.')
         self.run_next_test()
         self._logger.info(self.results)
@@ -74,11 +79,10 @@ class Tester(Ryuo):
             else:
                 self._logger.info('Test %s failed', test_name)
 
-    def run_mininet(self):
+    def setup_mininet(self):
         RyuoOVSSwitch.setup()
         # Clean up environment
-        mn_c = subprocess.Popen(['mn', '-c'])
-        mn_c.wait()
+        subprocess.call(['mn', '-c'])
         self.net = Mininet(topo=RyuoTopoFromTopoZoo(self.gml_file,
                                                     'OpenFlow13',
                                                     self.working_dir,
@@ -86,7 +90,6 @@ class Tester(Ryuo):
                            switch=RyuoOVSSwitch,
                            controller=RemoteController,
                            link=TCLink)
-        self.net.start()
 
     def close(self):
         self.net.stop()

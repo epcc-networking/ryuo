@@ -44,6 +44,8 @@ class KFRoutingApp(Ryuo):
                                    port.port.dpid,
                                    port.port.port_no)
                 return None
+
+        self._logger.info('Setting address of %d.%d', router_id, port_no)
         self.ports[router_id][port_no].set_ip(ip, mask, nw)
         self.local_apps[router_id].set_port_address(port_no, ip, mask, nw)
         return {'dpid': router_id, 'port_no': port_no, 'ip': address}
@@ -126,7 +128,7 @@ class KFRoutingApp(Ryuo):
                             '%s from port %d to ports %s',
                             dst_str, in_port, str(sorted_ports))
                         # self._routing_tables[src].add(router,
-                        #                              dst_str,
+                        # dst_str,
                         #                              None,
                         #                              None,
                         #                              None,
@@ -134,7 +136,6 @@ class KFRoutingApp(Ryuo):
                         #                              in_port,
                         #                              group_id)
         return ''
-
 
     @set_ev_cls(EventSwitchEnter)
     def _switch_entered(self, event):
@@ -177,11 +178,15 @@ class KFRoutingApp(Ryuo):
             self._logger.info('src: %d, dst: %d, degree: %d, udst: %d',
                               src_dpid,
                               dst_dpid, degree[dst_dpid], ultimate_dst)
+            updated = False
             for olink in graph[dst_dpid].values():
                 if olink is not None and olink.dst.dpid != src_dpid:
                     src_dpid = dst_dpid
                     dst_dpid = olink.dst.dpid
+                    updated = True
                     break
+            if not updated:
+                break
         self._logger.info('True sink: %d', dst_dpid)
         return dst_dpid
 
@@ -225,7 +230,7 @@ class _RestController(ControllerBase):
         if address is None:
             return error_response(400, 'Empty address')
         return json_response(self.app.set_port_address(address,
-                                                       int(router_id),
+                                                       int(router_id, 16),
                                                        int(port_no)))
 
     @rest_route('router', '/router/routing', methods=['POST'])

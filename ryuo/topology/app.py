@@ -1,9 +1,7 @@
 from ryu.controller.handler import set_ev_cls
-
 from ryu.topology.switches import Link
 
 from ryuo.controller.central import Ryuo
-
 from ryuo.topology import event
 from ryuo.topology.common import Switch
 from ryuo.utils import expose

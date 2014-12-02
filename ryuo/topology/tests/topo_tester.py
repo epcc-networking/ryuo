@@ -63,3 +63,4 @@ class TopoTester(Tester):
 
     def verify_3_links_up_again(self, dummy):
         return self.verify_1_links(dummy)
+
