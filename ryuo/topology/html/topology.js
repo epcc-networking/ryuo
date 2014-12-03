@@ -68,17 +68,20 @@ function _tick() {
 }
 elem.drag = elem.force.drag().on("dragstart", _dragstart);
 function _dragstart(d) {
-    var dpid = dpid_to_int(d.dpid);
-    d3.json("/stats/flow/" + dpid, function (e, data) {
-        flows = data[dpid];
-        console.log(flows);
-        elem.console.selectAll("ul").remove();
-        li = elem.console.append("ul")
-            .selectAll("li");
-        li.data(flows).enter().append("li")
-            .text(function (d) {
-                return JSON.stringify(d, null, " ");
-            });
+    d3.json('/router/' + d.dpid, function (e, data) {
+        var addresses = data;
+        console.log(addresses);
+        elem.console.selectAll('ul').remove();
+        var li = elem.console.append('ul').selectAll('li');
+        var address_list = [];
+        for (var port_no in addresses) {
+            if (addresses.hasOwnProperty(port_no)) {
+                address_list.push(addresses[port_no]);
+            }
+        }
+        li.data(address_list).enter().append('li').text(function (d) {
+            return d.port_no + ': ' + d.ip + '/' + d.netmask;
+        })
     });
     d3.select(this).classed("fixed", d.fixed = true);
 }
@@ -140,12 +143,14 @@ var topo = {
     nodes: [],
     links: [],
     node_index: {}, // dpid -> index of nodes array
+    addresses: {}, // dpid:port_no -> address
     initialize: function (data) {
         this.add_nodes(data.switches);
         this.add_links(data.links);
     },
     add_nodes: function (nodes) {
         for (var i = 0; i < nodes.length; i++) {
+            nodes[i].addresses = {};
             this.nodes.push(nodes[i]);
         }
         this.refresh_node_index();
@@ -245,6 +250,10 @@ var topo = {
 
         return {x: x, y: y};
     },
+    add_address: function (address) {
+        var node = this.nodes[this.node_index[address.dpid]];
+        node.addresses[address.port_no] = address;
+    },
     refresh_node_index: function () {
         this.node_index = {};
         for (var i = 0; i < this.nodes.length; i++) {
@@ -279,6 +288,11 @@ var rpc = {
     },
     event_link_delete: function (links) {
         topo.delete_links(links);
+        elem.update();
+        return "";
+    },
+    event_address_add: function (address) {
+        topo.add_address(address);
         elem.update();
         return "";
     }

@@ -6,6 +6,8 @@ from ryu.controller.handler import set_ev_cls
 
 from ryuo.constants import ROUTER_ID_PATTERN, PORTNO_PATTERN
 from ryuo.controller.central import Ryuo
+from ryuo.kf_routing.event import EventAddressRemove, Address
+from ryuo.kf_routing.event import EventAddressAdd
 from ryuo.topology.api import get_all_link
 from ryuo.topology.event import EventSwitchEnter, EventSwitchLeave, \
     EventPortAdd, EventPortModify, EventPortDelete
@@ -19,6 +21,8 @@ WSGI_CONTEXT_KEY = 'wsgi'
 
 class KFRoutingApp(Ryuo):
     _CONTEXTS = {WSGI_CONTEXT_KEY: WSGIApplication}
+
+    _EVENTS = {EventAddressAdd, EventAddressRemove}
 
     def __init__(self, *args, **kwargs):
         super(KFRoutingApp, self).__init__(*args, **kwargs)
@@ -53,6 +57,8 @@ class KFRoutingApp(Ryuo):
         self._logger.info('Setting address of %d.%d', router_id, port_no)
         self.ports[router_id][port_no].set_ip(ip, mask, nw)
         self.local_apps[router_id].set_port_address(port_no, ip, mask, nw)
+        self.send_event_to_observers(
+            EventAddressAdd(Address(router_id, port_no, ip, mask)))
         return {'dpid': router_id, 'port_no': port_no, 'ip': address}
 
     def routing(self):
@@ -132,14 +138,6 @@ class KFRoutingApp(Ryuo):
                         self._logger.info(
                             '%s from port %d to ports %s',
                             dst_str, in_port, str(sorted_ports))
-                        # self._routing_tables[src].add(router,
-                        # dst_str,
-                        # None,
-                        #                              None,
-                        #                              None,
-                        #                              None,
-                        #                              in_port,
-                        #                              group_id)
         return {router: self.get_router(router) for router in self.ports}
 
     @set_ev_cls(EventSwitchEnter)

@@ -6,6 +6,7 @@ from ryu.contrib.tinyrpc import InvalidReplyError
 from ryu.controller.handler import set_ev_cls
 
 from ryuo.controller.central import Ryuo
+from ryuo.kf_routing.event import EventAddressAdd
 from ryuo.topology.app import TopologyApp
 from ryuo.topology.event import EventSwitchEnter, EventSwitchLeave, \
     EventLinkAdd, EventLinkDelete
@@ -42,6 +43,11 @@ class WebSocketTopology(Ryuo):
     def _event_link_delete(self, ev):
         msg = ev.link.to_dict()
         self._rpc_broadcall('event_link_delete', msg)
+
+    @set_ev_cls(EventAddressAdd)
+    def _event_address_add(self, ev):
+        msg = ev.address.to_dict()
+        self._rpc_broadcall('event_address_add', msg)
 
     def _rpc_broadcall(self, func_name, msg):
         disconnected_clients = []
