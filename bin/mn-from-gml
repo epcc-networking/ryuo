@@ -36,7 +36,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     RyuoOVSSwitch.setup()
     subprocess.call(['mn', '-c'])
-    print args
     net = Mininet(topo=RyuoTopoFromTopoZoo(args.gml_file,
                                            args.openflow,
                                            args.local_app_dir,

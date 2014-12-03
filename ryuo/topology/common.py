@@ -116,7 +116,7 @@ class Switch(object):
 
     def to_dict(self):
         return {'dpid': dpid_to_str(self.dpid),
-                'ports': [port.to_dict for port in self.ports.values()]}
+                'ports': [port.to_dict() for port in self.ports.values()]}
 
     def __str__(self):
         msg = 'Switch<dpid=%s, ' % self.dpid

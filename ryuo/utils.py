@@ -17,7 +17,7 @@ class UnixTimeStampFormatter(logging.Formatter):
 
 def config_logger(logger):
     formatter = UnixTimeStampFormatter(
-        '[%(name)s][%(levelname)s][%(asctime)s]: %(message)s')
+        '[%(asctime)s][%(name)s][%(levelname)s]: %(message)s')
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     logger.addHandler(handler)

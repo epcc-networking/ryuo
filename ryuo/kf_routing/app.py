@@ -29,6 +29,11 @@ class KFRoutingApp(Ryuo):
     def get_all_links(self):
         return get_all_link(self)
 
+    def get_router(self, router_id):
+        return {port_no: self.ports[router_id][port_no].to_dict() for port_no
+                in
+                self.ports[router_id]}
+
     def set_port_address(self, address, router_id, port_no):
         nw, mask, ip = nw_addr_aton(address)
         # Check address overlap
@@ -129,13 +134,13 @@ class KFRoutingApp(Ryuo):
                             dst_str, in_port, str(sorted_ports))
                         # self._routing_tables[src].add(router,
                         # dst_str,
-                        #                              None,
+                        # None,
                         #                              None,
                         #                              None,
                         #                              None,
                         #                              in_port,
                         #                              group_id)
-        return ''
+        return {router: self.get_router(router) for router in self.ports}
 
     @set_ev_cls(EventSwitchEnter)
     def _switch_entered(self, event):
@@ -216,11 +221,6 @@ class _RestController(ControllerBase):
         super(_RestController, self).__init__(req, link, data, **config)
         self.app = data[APP_CONTEXT_KEY]
 
-    @rest_route('topo', '/topo/links', methods=['GET'])
-    def get_links(self, req, **kwargs):
-        links = self.app.get_all_links()
-        return json_response([link.to_dict() for link in links])
-
     @rest_route('router', '/router/{router_id}/{port_no}/address',
                 methods=['POST'],
                 requirements={'router_id': ROUTER_ID_PATTERN,
@@ -232,6 +232,12 @@ class _RestController(ControllerBase):
         return json_response(self.app.set_port_address(address,
                                                        int(router_id, 16),
                                                        int(port_no)))
+
+    @rest_route('router', '/router/{router_id}',
+                methods=['GET'],
+                requirements={'router_id': ROUTER_ID_PATTERN})
+    def get_router(self, req, router_id, **kwargs):
+        return json_response(self.app.get_router(int(router_id, 16)))
 
     @rest_route('router', '/router/routing', methods=['POST'])
     def routing(self, req, **kwargs):
@@ -256,3 +262,9 @@ class _Port(object):
     def update(self, port):
         self.port = port
         self.port_no = port.port_no
+
+    def to_dict(self):
+        return {'ip': self.ip,
+                'netmask': self.netmask,
+                'nw': self.nw,
+                'port_no': self.port_no}

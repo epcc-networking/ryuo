@@ -55,7 +55,7 @@ class TopologyApp(Ryuo):
         self._logger.debug('Switch request')
         dpid = req.dpid
         if dpid is None:
-            switches = self.switches
+            switches = self.switches.values()
         else:
             switches = [self.switches[dpid]]
         rep = event.EventSwitchReply(req.src, switches)

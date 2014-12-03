@@ -236,7 +236,7 @@ class KFRoutingLocal(LocalController):
 
     def _packet_in_invalid_ttl(self, msg, headers):
         src_ip = headers[IPV4].src
-        self._logger('Received packet with invalid ttl from %s.', src_ip)
+        self._logger.info('Received packet with invalid ttl from %s.', src_ip)
         in_port = self.ofctl.get_packet_in_inport(msg)
         in_ip = self.ports[in_port].ip
         if src_ip in self.get_ips():
