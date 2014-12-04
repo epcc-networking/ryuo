@@ -251,8 +251,8 @@ var topo = {
         return {x: x, y: y};
     },
     add_address: function (address) {
-        var node = this.nodes[this.node_index[address.dpid]];
-        node.addresses[address.port_no] = address;
+        //var node = this.nodes[this.node_index[address.dpid]];
+        //node.addresses[address.port_no] = address;
     },
     refresh_node_index: function () {
         this.node_index = {};

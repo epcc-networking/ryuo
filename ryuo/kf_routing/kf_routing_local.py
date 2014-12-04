@@ -195,7 +195,7 @@ class KFRoutingLocal(LocalController):
         if headers[ARP].opcode == ARP_REQUEST:
             src_mac = headers[ARP].src_mac
             dst_mac = self.ports[in_port].mac
-            arp_target_mac = dst_mac
+            arp_target_mac = src_mac
             self.ofctl.send_arp(ARP_REPLY,
                                 dst_mac,
                                 src_mac,
@@ -466,7 +466,7 @@ class _Group(object):
 class _GroupTable(dict):
     def __init__(self, ofctl, ports):
         super(_GroupTable, self).__init__()
-        self.group_id = 0
+        self.group_id = 1
         self.ofctl = ofctl
         self.ports = ports
 

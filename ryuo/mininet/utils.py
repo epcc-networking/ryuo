@@ -36,6 +36,6 @@ def attach_host_to_switches(begin_net, net, ips=None):
         ips.append(['10.0.%d.1/24' % begin_net, int(switch.dpid, 16),
                     switch.ports[link.intf1]])
         host.setIP('10.0.%d.2' % begin_net, 24)
-        host.setDefaultRoute(link.intf2)
+        host.setDefaultRoute('via 10.0.%d.1' % begin_net)
         begin_net += 1
     return begin_net, ips

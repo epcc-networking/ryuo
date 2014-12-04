@@ -29,6 +29,7 @@ class TopologyApp(Ryuo):
         self.switches[dpid] = switch
         self.send_event_to_observers(event.EventSwitchEnter(switch))
 
+    @expose
     def ryuo_switch_leave(self, dpid, uri):
         super(TopologyApp, self).ryuo_switch_leave(dpid, uri)
         switch = self.switches[dpid]
