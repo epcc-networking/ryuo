@@ -2,8 +2,10 @@ import subprocess
 import time
 import random
 
+from ryu.base import app_manager
+
 from ryuo.mininet.utils import assign_ip_to_switches, attach_host_to_switches
-from ryuo.tests.tester import Tester
+from ryuo.tests.tester import Tester, ryuo_test
 from ryuo.tests.utils import add_addresses
 
 
@@ -31,14 +33,16 @@ class KFTester(Tester):
         subprocess.call(
             ['curl', '-X', 'POST', 'http://127.0.0.1:8080/router/routing'])
 
-    def test_1_ping_all(self):
+    @ryuo_test(order=1)
+    def ping_all(self):
         time.sleep(5)
         return self.net.pingAll(timeout=2)
 
-    def verify_1_ping_all(self, res):
+    def verify_ping_all(self, res):
         return True if res == 0 else False
 
-    def test_2_random_one_link_down(self):
+    @ryuo_test(repeat=5, order=2)
+    def random_one_link_down(self):
         """
         Randomly break one link, the degree of the two nodes connected by
         the selected link must larger than 1
@@ -55,18 +59,22 @@ class KFTester(Tester):
                                   'down')
         return link
 
-    def verify_2_random_one_link_down(self, down_link):
+    def verify_random_one_link_down(self, down_link):
         return self.net.pingAll(timeout=2) == 0
 
-    def clean_2_random_one_link_down(self, down_link):
+    def clean_random_one_link_down(self, down_link):
         self.net.configLinkStatus(down_link.intf1.node.name,
                                   down_link.intf2.node.name,
                                   'up')
 
-    def test_3_link_up_again(self):
+    @ryuo_test(order=3)
+    def link_up_again(self):
         pass
 
-    def verify_3_link_up_again(self, dummy):
+    def verify_link_up_again(self, dummy):
         return self.net.pingAll(timeout=2) == 0
 
+
+app_manager.require_app('ryuo.kf_routing.app')
+app_manager.require_app('ryuo.topology.app')
 

@@ -1,5 +1,7 @@
+import inspect
 import subprocess
 import time
+import sys
 
 from mininet.link import TCLink
 from mininet.net import Mininet
@@ -12,15 +14,35 @@ from ryuo.mininet.topology import RyuoTopoFromTopoZoo
 from ryuo.topology.api import get_all_switch
 
 
-def deadline(seconds):
+def ryuo_test(deadline=0, repeat=0, order=sys.maxint):
     def _real_dec(func):
-        def wrapper(*args, **kwargs):
-            res = func(*args, **kwargs)
-            time.sleep(seconds)
-            return res
+        def wrapper(self, *args, **kwargs):
+            to_repeat = repeat
+            name = func.__name__
+            test_res = True
+            self._logger.info('Test %s start...', name)
+            run = 1
+            while to_repeat > -1:
+                self._logger.info('Test %s, run %d', name, run)
+                res = func(self, *args, **kwargs)
+                time.sleep(deadline)
+                verifier = getattr(self, 'verify_%s' % name)
+                run_res = verifier(res)
+                test_res &= run_res
+                if run_res:
+                    self._logger.info('Success')
+                else:
+                    self._logger.error('Failed')
+                cleaner = getattr(self, 'clean_%s' % name, None)
+                if cleaner is not None:
+                    cleaner(res)
+                to_repeat -= 1
+                run += 1
+            return test_res
 
+        wrapper.__order__ = order
+        wrapper.__test_name__ = func.__name__
         return wrapper
-
     return _real_dec
 
 
@@ -34,10 +56,11 @@ class Tester(Ryuo):
         self.gml_file = gml_file
         self.local_apps_to_run = local_apps
         self.working_dir = working_dir
-        for test in dir(self):
-            if test.startswith('test_'):
-                self.pending.append(test)
-        self.pending = sorted(self.pending, reverse=True)
+        for name, func in inspect.getmembers(type(self)):
+            if hasattr(func, '__order__'):
+                self.pending.append(func)
+        self._logger.info('%d tests loaded.', len(self.pending))
+        self.pending = sorted(self.pending, key=lambda f: f.__order__)
         self.test_thread = hub.spawn(self.run_tests)
         self.threads.append(self.test_thread)
 
@@ -56,7 +79,8 @@ class Tester(Ryuo):
             time.sleep(5)
         self.on_all_apps_up()
         self._logger.info('Tests begins.')
-        self.run_next_test()
+        for test in self.pending:
+            self.results[test.__test_name__] = test(self)
         self._logger.info(self.results)
         self.close()
 

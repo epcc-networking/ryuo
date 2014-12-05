@@ -4,9 +4,9 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls
 from ryu.lib.packet import packet
 from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
-from ryu.lib.packet.icmp import icmp, ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
+from ryu.lib.packet.icmp import ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
     ICMP_PORT_UNREACH_CODE, ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED, \
-    ICMP_TTL_EXPIRED_CODE
+    ICMP_TTL_EXPIRED_CODE, ICMP_ECHO_REQUEST, ICMP_HOST_UNREACH_CODE
 from ryu.ofproto import ether
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
@@ -56,12 +56,12 @@ class KFRoutingLocal(LocalController):
 
         priority, dummy = _get_priority(PRIORITY_MAC_LEARNING)
         self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
-                                     dst_ip=nw, dst_mask=mask)
+                                      dst_ip=nw, dst_mask=mask)
         self._logger.info('Set MAC learning for %s', ip)
         # IP handling
         priority, dummy = _get_priority(PRIORITY_IP_HANDLING)
         self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
-                                     dst_ip=ip)
+                                      dst_ip=ip)
         self._logger.info('Set IP handling for %s', ip)
         # L2 switching
         out_port = self.ofctl.dp.ofproto.OFPP_NORMAL
@@ -106,7 +106,9 @@ class KFRoutingLocal(LocalController):
         if IPV4 in headers:
             if headers[IPV4].dst in self.get_ips():
                 if ICMP in headers:
-                    return self._packet_in_icmp_req(msg, headers)
+                    if headers[ICMP].type == ICMP_ECHO_REQUEST:
+                        return self._packet_in_icmp_req(msg, headers)
+                    self._logger.warning('Unsupported ICMP type, ignore.')
                 elif TCP in headers or UDP in headers:
                     return self._packet_in_tcp_udp(msg, headers)
             return self._packet_in_to_node(msg, headers)
@@ -236,7 +238,9 @@ class KFRoutingLocal(LocalController):
 
     def _packet_in_invalid_ttl(self, msg, headers):
         src_ip = headers[IPV4].src
-        self._logger.info('Received packet with invalid ttl from %s.', src_ip)
+        dst_ip = headers[IPV4].dst
+        self._logger.info('Received packet with invalid ttl from %s to %s.',
+                          src_ip, dst_ip)
         in_port = self.ofctl.get_packet_in_inport(msg)
         in_ip = self.ports[in_port].ip
         if src_ip in self.get_ips():
@@ -297,8 +301,8 @@ class KFRoutingLocal(LocalController):
         if src_ip is not None:
             self.ofctl.send_icmp(in_port,
                                  headers,
-                                 icmp.ICMP_DEST_UNREACH,
-                                 icmp.ICMP_HOST_UNREACH_CODE,
+                                 ICMP_DEST_UNREACH,
+                                 ICMP_HOST_UNREACH_CODE,
                                  msg_data=data,
                                  src_ip=src_ip)
             self._logger.info('Send ICMP unreachable to %s', dst_ip)

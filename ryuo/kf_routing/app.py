@@ -63,6 +63,7 @@ class KFRoutingApp(Ryuo):
 
     def routing(self):
         links = self.get_all_links()
+        self._logger.debug([link.to_dict() for link in links])
         dpids = self.ports.keys()
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                  for src_dpid in dpids}
@@ -80,22 +81,20 @@ class KFRoutingApp(Ryuo):
             level[dst] = 0
             dst_ips = ['%s/%d' % (port.ip, port.netmask) for port in
                        self.ports[dst].values() if port.ip is not None]
-            visited = {src: False for src in dpids}
             # build PSNs for each destination
             while not bfs_q.empty():
                 node = bfs_q.get()
-                visited[node] = True
                 for link in links:
                     if link.dst.dpid == node \
-                            and visited[link.src.dpid] is False:
+                            and level[link.src.dpid] is None:
                         level[link.src.dpid] = level[node] + 1
                         bfs_q.put(link.src.dpid)
-            self._logger.info('Level for dst=%d: %s', dst, str(level))
+            self._logger.debug('Level for dst=%d: %s', dst, str(level))
             # Get routing table
             for src in dpids:
                 if src == dst:
                     continue
-                self._logger.info('On router %d: ', src)
+                self._logger.debug('On router %d: ', src)
                 router = self.local_apps[src]
                 ports = [port.port_no for port in
                          self.ports[src].values() if
@@ -125,7 +124,7 @@ class KFRoutingApp(Ryuo):
                                                    candidate_true_sinks,
                                                    in_port_true_sink))
                     # remove ports with the same true sink as the in_port.
-                    self._logger.info('For in port %s, candidates: %s',
+                    self._logger.debug('For in port %s, candidates: %s',
                                       in_port,
                                       str([link.to_dict() for link in
                                            sorted_candidates]))

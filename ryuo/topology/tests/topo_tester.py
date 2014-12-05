@@ -1,7 +1,9 @@
 import random
 import time
 
-from ryuo.tests.tester import Tester
+from ryu.base import app_manager
+
+from ryuo.tests.tester import Tester, ryuo_test
 from ryuo.tests.utils import name_to_dpid
 from ryuo.topology.api import get_all_link
 
@@ -13,10 +15,11 @@ class TopoTester(Tester):
             'ryuo.topology.topology_local',
             '/home/zsy/Projects/resilient', *args, **kwargs)
 
-    def test_1_links(self):
+    @ryuo_test(order=1)
+    def all_links(self):
         pass
 
-    def verify_1_links(self, dummy):
+    def verify_all_links(self, dummy):
         links = get_all_link(self)
         if len(links) / 2 == len(self.net.links):
             links = [(link.src.dpid, link.dst.dpid) for link in links]
@@ -28,7 +31,8 @@ class TopoTester(Tester):
                     (dst_dpid, src_dpid) in links)
         return False
 
-    def test_2_links_down(self):
+    @ryuo_test(order=2, repeat=5)
+    def links_down(self):
         links = random.sample(self.net.links,
                               random.randint(1, len(self.net.links)))
         for link in links:
@@ -37,7 +41,7 @@ class TopoTester(Tester):
         time.sleep(len(links))
         return links
 
-    def verify_2_links_down(self, down_links):
+    def verify_links_down(self, down_links):
         links = [(link.src.dpid, link.dst.dpid) for link in get_all_link(self)]
         res = True
         for down_link in down_links:
@@ -52,15 +56,18 @@ class TopoTester(Tester):
                 res = False
         return res
 
-    def clean_2_links_down(self, links):
+    def clean_links_down(self, links):
         for link in links:
             self.net.configLinkStatus(
                 link.intf1.node.name, link.intf2.node.name, 'up')
         time.sleep(len(links))
 
-    def test_3_links_up_again(self):
+    @ryuo_test(order=3)
+    def links_up_again(self):
         pass
 
-    def verify_3_links_up_again(self, dummy):
-        return self.verify_1_links(dummy)
+    def verify_links_up_again(self, dummy):
+        return self.verify_all_links(dummy)
 
+
+app_manager.require_app('ryuo.topology.app')
