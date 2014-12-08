@@ -7,7 +7,7 @@ import time
 from mininet.cli import CLI
 from mininet.link import TCLink
 from mininet.net import Mininet
-from mininet.node import RemoteController
+from mininet.node import RemoteController, OVSSwitch
 
 from ryuo.mininet.node import RyuoOVSSwitch
 from ryuo.mininet.topology import RyuoTopoFromTopoZoo
@@ -23,26 +23,36 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--openflow', help='OpenFlow version',
                         action='store', default='OpenFlow13')
     parser.add_argument('-l', '--local-apps', help='local ryu apps to run',
-                        action='store', nargs='+', required=True)
+                        action='store', nargs='+')
     parser.add_argument('-d', '--local-app-dir', help='Location of local apps',
                         action='store', default=os.getcwd())
     parser.add_argument('-a', '--assign-ip', action='store_true',
                         help="assign IPs to switch ports")
     parser.add_argument('-e', '--end-hosts', action='store_true',
                         help='attach host to each switch')
+    parser.add_argument('-n', '--normal', action='store_true',
+                        help="don't use ryuo local controller")
     parser.add_argument('-c', '--ryuo-ip', action='store', default='127.0.0.1',
                         help='IP address of Ryuo controller')
 
     args = parser.parse_args()
     RyuoOVSSwitch.setup()
     subprocess.call(['mn', '-c'])
-    net = Mininet(topo=RyuoTopoFromTopoZoo(args.gml_file,
-                                           args.openflow,
-                                           args.local_app_dir,
-                                           ' '.join(args.local_apps)),
-                  switch=RyuoOVSSwitch,
-                  controller=RemoteController,
-                  link=TCLink)
+    if args.normal:
+        net = Mininet(topo=RyuoTopoFromTopoZoo(args.gml_file,
+                                               args.openflow,
+                                               args.local_app_dir),
+                      switch=OVSSwitch,
+                      controller=RemoteController,
+                      link=TCLink)
+    else:
+        net = Mininet(topo=RyuoTopoFromTopoZoo(args.gml_file,
+                                               args.openflow,
+                                               args.local_app_dir,
+                                               ' '.join(args.local_apps)),
+                      switch=RyuoOVSSwitch,
+                      controller=RemoteController,
+                      link=TCLink)
     net_num = 1
     ips = []
     if args.assign_ip:

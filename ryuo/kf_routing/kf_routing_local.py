@@ -13,7 +13,7 @@ from ryu.lib import hub
 
 from ryuo.kf_routing.app import KFRoutingApp
 from ryuo.topology.event import EventPortDelete, EventPortAdd, \
-    EventPortModify, EventLinkAdd, EventLinkDelete
+    EventPortModify, EventLinkAdd
 from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
@@ -33,13 +33,13 @@ class KFRoutingLocal(LocalController):
         self.arp_table = None
         self.groups = None
         self.routing_table = None
+        self.disabled_failover_ports = None
         self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
 
     @expose
     def add_route(self, dst_ip, in_port, output_ports):
         group = self.groups.add_entry(output_ports, in_port)
-        group.install()
         route = self.routing_table.add_entry(dst_ip=dst_ip,
                                              in_port=in_port,
                                              out_group=group.id)
@@ -139,10 +139,6 @@ class KFRoutingLocal(LocalController):
             pass
         self.ports[dst_port_no].set_peer_mac(peer_mac)
 
-    @set_ev_cls(EventLinkDelete)
-    def _on_link_deleted(self, ev):
-        pass
-
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
 
@@ -177,6 +173,7 @@ class KFRoutingLocal(LocalController):
         self.groups = _GroupTable(self.ofctl, self.ports)
         self.routing_table = _RoutingTable(self._logger)
         self.arp_table = _ArpTable(self._logger)
+        self.disabled_failover_ports = _DisabledFailoverPorts()
         self._init_switch()
 
     def _switch_leave(self):
@@ -248,12 +245,12 @@ class KFRoutingLocal(LocalController):
                 'Receive packet with invalid ttl from myself.')
             return
         if in_ip is not None:
-            self.ofctl.send_icmp(in_port,
-                                 headers,
-                                 ICMP_TIME_EXCEEDED,
-                                 ICMP_TTL_EXPIRED_CODE,
-                                 msg_data=msg.data,
-                                 src_ip=in_ip)
+            self.ofctl.reply_icmp(in_port,
+                                  headers,
+                                  ICMP_TIME_EXCEEDED,
+                                  ICMP_TTL_EXPIRED_CODE,
+                                  msg_data=msg.data,
+                                  src_ip=in_ip)
             self._logger.info('Send ICMP time exceeded from %s to %s.',
                               in_ip,
                               src_ip)
@@ -261,19 +258,19 @@ class KFRoutingLocal(LocalController):
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
         in_port = self.ofctl.get_packet_in_inport(msg)
-        self.ofctl.send_icmp(in_port,
-                             headers,
-                             ICMP_ECHO_REPLY,
-                             ICMP_ECHO_REPLY_CODE,
-                             icmp_data=headers[ICMP].data)
+        self.ofctl.reply_icmp(in_port,
+                              headers,
+                              ICMP_ECHO_REPLY,
+                              ICMP_ECHO_REPLY_CODE,
+                              icmp_data=headers[ICMP].data)
 
     def _packet_in_tcp_udp(self, msg, headers):
         in_port = self.ofctl.get_packet_in_inport(msg)
-        self.ofctl.send_icmp(in_port,
-                             headers,
-                             ICMP_DEST_UNREACH,
-                             ICMP_PORT_UNREACH_CODE,
-                             msg_data=msg.data)
+        self.ofctl.reply_icmp(in_port,
+                              headers,
+                              ICMP_DEST_UNREACH,
+                              ICMP_PORT_UNREACH_CODE,
+                              msg_data=msg.data)
 
     def _packet_in_to_node(self, msg, headers):
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
@@ -299,12 +296,12 @@ class KFRoutingLocal(LocalController):
     def _send_icmp_unreachable_error(self, in_port, headers, data, dst_ip):
         src_ip = self._get_send_port_ip(headers)
         if src_ip is not None:
-            self.ofctl.send_icmp(in_port,
-                                 headers,
-                                 ICMP_DEST_UNREACH,
-                                 ICMP_HOST_UNREACH_CODE,
-                                 msg_data=data,
-                                 src_ip=src_ip)
+            self.ofctl.reply_icmp(in_port,
+                                  headers,
+                                  ICMP_DEST_UNREACH,
+                                  ICMP_HOST_UNREACH_CODE,
+                                  msg_data=data,
+                                  src_ip=src_ip)
             self._logger.info('Send ICMP unreachable to %s', dst_ip)
 
     def send_icmp_unreachable_error(self, suspended_packet):
@@ -366,6 +363,11 @@ class _ArpTable(dict):
             if not item.is_expired():
                 return item
         return d
+
+    def get_ip(self, mac):
+        for k in self.keys():
+            if self[k] == mac:
+                return k
 
     def add_entry(self, ip, mac):
         self[ip] = _ArpEntry(ip, mac)
@@ -444,10 +446,18 @@ class _Group(object):
                  group_table):
         super(_Group, self).__init__()
         self.id = group_id
-        self.output_ports = output_ports
-        self.watch_ports = watch_ports
         self.inport = inport
         self.group_table = group_table
+        self.output_ports = output_ports
+        self.watch_ports = watch_ports
+
+    def __eq__(self, other):
+        return self.inport == other.inport \
+               and self.output_ports == other.output_ports \
+               and self.watch_ports == other.watch_ports
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def install(self):
         self._set(self.group_table.ofctl.dp.ofproto.OFPGC_ADD)
@@ -478,9 +488,14 @@ class _GroupTable(dict):
         super(_GroupTable, self).clear()
 
     def add_entry(self, output_ports, inport):
+        # Reuse group if possible
+        for group in self.values():
+            if group.inport == inport and group.output_ports == output_ports:
+                return group
         group = _Group(self.group_id, output_ports, output_ports, inport, self)
         self[self.group_id] = group
         self.group_id += 1
+        group.install()
         return group
 
     def update_entry(self, port_no):
@@ -592,3 +607,27 @@ class _Port(object):
 
     def set_mac(self, mac):
         self.mac = mac
+
+
+class _DisabledFailoverPorts(dict):
+    """
+    disabled port -> [downed 1st option port_no]
+    """
+
+    def __init__(self):
+        super(_DisabledFailoverPorts, self).__init__()
+
+    def disable_port(self, port, due_port):
+        if port not in self:
+            self[port] = set()
+        self[port].add(due_port)
+
+    def port_recoverd(self, due_port):
+        updated = False
+        for port in self:
+            if due_port in self[port]:
+                self[port].remove(due_port)
+                updated = True
+            if len(self[port]) == 0:
+                del self[port]
+        return updated

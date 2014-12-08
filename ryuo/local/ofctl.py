@@ -88,7 +88,8 @@ class OfCtl(object):
 
     def set_flow(self, cookie, priority, dl_type=0, dl_dst=0, dl_vlan=0,
                  nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
-                 nw_proto=0, idle_timeout=0, actions=None, in_port=None):
+                 nw_proto=0, idle_timeout=0, actions=None, in_port=None,
+                 ip_proto=None):
         ofp = self.dp.ofproto
         ofp_parser = self.dp.ofproto_parser
         cmd = ofp.OFPFC_ADD
@@ -103,6 +104,8 @@ class OfCtl(object):
             match.set_vlan_vid(dl_vlan)
         if in_port:
             match.set_in_port(in_port)
+        if ip_proto:
+            match.set_ip_proto(ip_proto)
         # TODO: Handle ipv6 address
         if nw_src:
             match.set_ipv4_src_masked(ipv4_text_to_int(nw_src),
@@ -126,13 +129,15 @@ class OfCtl(object):
         self.dp.send_msg(m)
 
     def set_packet_in_flow(self, cookie, priority, dl_type=0, dl_dst=0,
-                          dl_vlan=0, dst_ip=0, dst_mask=32, nw_proto=0):
+                           dl_vlan=0, dst_ip=0, dst_mask=32, nw_proto=0,
+                           ip_proto=None, idle_timeout=0):
         miss_send_len = UINT16_MAX
         actions = [self.dp.ofproto_parser.OFPActionOutput(
             self.dp.ofproto.OFPP_CONTROLLER, miss_send_len)]
         self.set_flow(cookie, priority, dl_type=dl_type, dl_dst=dl_dst,
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
-                      nw_proto=nw_proto, actions=actions)
+                      nw_proto=nw_proto, actions=actions, ip_proto=ip_proto,
+                      idle_timeout=idle_timeout)
 
     def set_failover_group(self, group_id, watch_ports, out_ports, src_macs,
                            dst_macs, command):
@@ -160,16 +165,17 @@ class OfCtl(object):
         self.set_failover_group(group_id, watch_ports, out_ports, src_macs,
                                 dst_macs, self.dp.ofproto.OFPGC_ADD)
 
-    def send_icmp(self, in_port, protocol_list, icmp_type, icmp_code,
-                  icmp_data=None, msg_data=None, src_ip=None):
+    def send_icmp(self, in_port, eth_src, eth_dst, icmp_type, icmp_code,
+                  ip_dst, icmp_data=None, msg_data=None, src_ip=None,
+                  ip_header_length=5, ip_version=4, ip_tos=0, identification=0,
+                  flags=0, ip_offset=0):
         # Generate ICMP reply packet
         csum = 0
         offset = ethernet.ethernet._MIN_LEN
 
         ether_proto = ether.ETH_TYPE_IP
 
-        eth = protocol_list[ETHERNET]
-        e = ethernet.ethernet(eth.src, eth.dst, ether_proto)
+        e = ethernet.ethernet(eth_dst, eth_src, ether_proto)
 
         if icmp_data is None and msg_data is not None:
             ip_datagram = msg_data[offset:]
@@ -182,19 +188,16 @@ class OfCtl(object):
 
         ic = icmp.icmp(icmp_type, icmp_code, csum, data=icmp_data)
 
-        ip = protocol_list[IPV4]
-        if src_ip is None:
-            src_ip = ip.dst
-        ip_total_length = ip.header_length * 4 + ic._MIN_LEN
+        ip_total_length = ip_header_length * 4 + ic._MIN_LEN
         if ic.data is not None:
             ip_total_length += ic.data._MIN_LEN
             if ic.data.data is not None:
                 ip_total_length += + len(ic.data.data)
-        i = ipv4.ipv4(ip.version, ip.header_length, ip.tos,
-                      ip_total_length, ip.identification, ip.flags,
-                      ip.offset, DEFAULT_TTL, inet.IPPROTO_ICMP, csum,
-                      src_ip, ip.src)
-        self.logger.info('Sending from %s to %s', src_ip, ip.src)
+        i = ipv4.ipv4(ip_version, ip_header_length, ip_tos,
+                      ip_total_length, identification, flags,
+                      ip_offset, DEFAULT_TTL, inet.IPPROTO_ICMP, csum,
+                      src_ip, ip_dst)
+        self.logger.info('Sending from %s to %s', src_ip, ip_dst)
         pkt = packet.Packet()
         pkt.add_protocol(e)
         pkt.add_protocol(i)
@@ -204,6 +207,27 @@ class OfCtl(object):
         # Send packet out
         self.send_packet_out(in_port, self.dp.ofproto.OFPP_IN_PORT,
                              pkt.data, data_str=str(pkt))
+
+    def reply_icmp(self, in_port, protocol_list, icmp_type, icmp_code,
+                   icmp_data=None, msg_data=None, src_ip=None):
+
+        eth = protocol_list[ETHERNET]
+        ip = protocol_list[IPV4]
+        self.send_icmp(in_port=in_port,
+                       eth_src=eth.dst,
+                       eth_dst=eth.src,
+                       icmp_type=icmp_type,
+                       icmp_code=icmp_code,
+                       icmp_data=icmp_data,
+                       msg_data=msg_data,
+                       src_ip=src_ip,
+                       ip_version=ip.version,
+                       ip_header_length=ip.header_length,
+                       ip_tos=ip.tos,
+                       identification=ip.identification,
+                       flags=ip.flags,
+                       ip_offset=ip.offset,
+                       ip_dst=ip.src)
 
     def send_arp(self, arp_opcode, src_mac, dst_mac,
                  src_ip, dst_ip, arp_target_mac, in_port, output):
