@@ -2,6 +2,7 @@ from Queue import Queue
 
 from routing import Routing, BaseRoutingTable, BaseRoute
 from ryuo.utils import nw_addr_aton, ip_addr_aton, ip_addr_ntoa
+from ryuo.kf_routing.app import KFRoutingApp
 
 
 class KFRouting(Routing):
@@ -20,6 +21,7 @@ class KFRouting(Routing):
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                  for src_dpid in dpids}
         degree = {src: 0 for src in dpids}
+        self._logger.debug(links)
         for link in links:
             dst = link.dst.dpid
             src = link.src.dpid
@@ -33,22 +35,20 @@ class KFRouting(Routing):
             level[dst] = 0
             dst_ips = ['%s/%d' % (port.ip, port.netmask) for port in
                        routers.get(dst).ports.values() if port.ip is not None]
-            visited = {src: False for src in dpids}
             # build PSNs for each destination
             while not bfs_q.empty():
                 node = bfs_q.get()
-                visited[node] = True
                 for link in links:
                     if link.dst.dpid == node \
-                            and visited[link.src.dpid] is False:
+                            and level[link.src.dpid] is None:
                         level[link.src.dpid] = level[node] + 1
                         bfs_q.put(link.src.dpid)
-            self._logger.info('Level for dst=%d: %s', dst, str(level))
+            self._logger.debug('Level for dst=%d: %s', dst, str(level))
             # Get routing table
             for src in dpids:
                 if src == dst:
                     continue
-                self._logger.info('On router %d: ', src)
+                self._logger.debug('On router %d: ', src)
                 router = routers.get(src)
                 ports = [port.port_no for port in
                          routers.get(src).ports.values() if
@@ -70,13 +70,13 @@ class KFRouting(Routing):
                                                                  dst)
                     sorted_candidates = sorted(candidates,
                                                cmp=lambda x, y:
-                                               KFRouting._compare_link(x, y,
-                                                                       level,
-                                                                       degree,
-                                                                       in_port,
-                                                                       candidate_true_sinks,
-                                                                       in_port_true_sink)
-                    )
+                                               KFRoutingApp.compare_link(
+                                                   x, y,
+                                                   level,
+                                                   degree,
+                                                   in_port,
+                                                   candidate_true_sinks,
+                                                   in_port_true_sink))
                     # remove ports with the same true sink as the in_port.
                     self._logger.info('For in port %s, candidates: %s',
                                       in_port,
@@ -91,8 +91,9 @@ class KFRouting(Routing):
                         output_ports[-1] = router.dp.ofproto.OFPP_IN_PORT
                     src_macs = [link.src.hw_addr for link in sorted_candidates]
                     dst_macs = [link.dst.hw_addr for link in sorted_candidates]
-                    group_id = router.add_failover_group(src_macs, dst_macs,
-                                                sorted_ports, output_ports)
+                    group_id = router.set_group(src_macs, dst_macs,
+                                                sorted_ports,
+                                                output_ports)
                     for dst_str in dst_ips:
                         self._logger.info(
                             '%s from port %d to ports %s group_id %d',
@@ -123,26 +124,6 @@ class KFRouting(Routing):
                     break
         self._logger.info('True sink: %d', dst_dpid)
         return dst_dpid
-
-    @staticmethod
-    def _get_level(link, level):
-        return level[link.src.dpid] - level[link.dst.dpid]
-
-    @staticmethod
-    def _compare_link(l1, l2, level, degree, in_port, candidate_sinks,
-                      in_port_sink):
-        if l1.src.port_no == in_port:
-            return 1
-        if l2.src.port_no == in_port:
-            return -1
-        level_diff = level[l1.dst.dpid] - level[l2.dst.dpid]
-        if level_diff != 0:
-            return level_diff
-        if candidate_sinks[l2] == in_port_sink:
-            return -1
-        if candidate_sinks[l1] == in_port_sink:
-            return 1
-        return degree[l2.dst.dpid] - degree[l1.dst.dpid]
 
     def get_routing_data_by_dst_ip(self, dpid, dst_ip):
         return None

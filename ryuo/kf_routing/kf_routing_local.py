@@ -38,14 +38,25 @@ class KFRoutingLocal(LocalController):
             self.send_icmp_unreachable_error)
 
     @expose
-    def add_route(self, dst_ip, in_port, output_ports):
-        group = self.groups.add_entry(output_ports, in_port)
+    def add_route(self, dst_ip, group_id):
+        group = self.groups[group_id]
         route = self.routing_table.add_entry(dst_ip=dst_ip,
-                                             in_port=in_port,
-                                             out_group=group.id)
+                                             in_port=group.inport,
+                                             out_group=group_id)
         self._install_routing_entry(route)
         self._logger.info('Route to %s from port %d to ports %s',
-                          dst_ip, in_port, str(output_ports))
+                          dst_ip, group.inport,
+                          str(self.groups[group_id].output_ports))
+
+    @expose
+    def add_routes(self, dst_ips, group_id):
+        for dst_ip in dst_ips:
+            self.add_route.lock_free(self, dst_ip, group_id)
+
+    @expose
+    def add_group(self, in_port, output_ports):
+        group = self.groups.add_entry(output_ports, in_port)
+        return group.id
 
     @expose
     def set_port_address(self, port_no, ip, mask, nw):

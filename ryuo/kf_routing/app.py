@@ -116,7 +116,7 @@ class KFRoutingApp(Ryuo):
                                                                  dst)
                     sorted_candidates = sorted(candidates,
                                                cmp=lambda x, y:
-                                               self._compare_link(
+                                               self.compare_link(
                                                    x, y,
                                                    level,
                                                    degree,
@@ -132,11 +132,10 @@ class KFRoutingApp(Ryuo):
                     sorted_ports = [link.src.port_no for link in
                                     sorted_candidates]
                     output_ports = list(sorted_ports)
-                    for dst_str in dst_ips:
-                        router.add_route(dst_str, in_port, output_ports)
-                        self._logger.info(
-                            '%s from port %d to ports %s',
-                            dst_str, in_port, str(sorted_ports))
+                    group_id = router.add_group(in_port, output_ports)
+                    router.add_routes(dst_ips, group_id)
+                    self._logger.info('%s from port %d to ports %s',
+                                      dst_ips, in_port, group_id)
         return {router: self.get_router(router) for router in self.ports}
 
     @set_ev_cls(EventSwitchEnter)
@@ -193,11 +192,11 @@ class KFRoutingApp(Ryuo):
         return dst_dpid
 
     @staticmethod
-    def _get_level(link, level):
+    def get_level(link, level):
         return level[link.src.dpid] - level[link.dst.dpid]
 
     @staticmethod
-    def _compare_link(l1, l2, level, degree, in_port, candidate_sinks,
+    def compare_link(l1, l2, level, degree, in_port, candidate_sinks,
                       in_port_sink):
         if l1.src.port_no == in_port:
             return 1

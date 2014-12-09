@@ -1,7 +1,7 @@
 from ryuo.constants import ARP
-from resilient_app import LINK_UP
+from traditional.resilient_app import LINK_UP
 
-from routing import Routing, BaseRoutingTable
+from traditional.routing import Routing, BaseRoutingTable
 
 
 class ShortestPathRouting(Routing):

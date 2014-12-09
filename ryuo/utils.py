@@ -133,4 +133,6 @@ def make_threadsafe(cls, methodnames, lockfactory):
 
 
 def expose(func):
-    return Pyro4.expose(lock_method(func))
+    locked = Pyro4.expose(lock_method(func))
+    locked.lock_free = func
+    return locked

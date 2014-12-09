@@ -25,7 +25,7 @@ class RestController(ControllerBase):
     @rest_route('route', '/router/{router_id}', methods=['GET'],
                 requirements={'router_id': ROUTER_ID_PATTERN})
     def get_router(self, req, **kwargs):
-        router = self.router_app.get_router(int(kwargs['router_id']))
+        router = self.router_app.get_router(int(kwargs['router_id'], 16))
         if router is None:
             return error_response(404, 'Router not found')
         return json_response(router)
@@ -34,8 +34,9 @@ class RestController(ControllerBase):
                 requirements={'router_id': ROUTER_ID_PATTERN,
                               'port_no': PORTNO_PATTERN})
     def get_port(self, req, **kwargs):
-        return json_response(self.router_app.get_port(int(kwargs['router_id']),
-                                                      int(kwargs['port_no'])))
+        return json_response(
+            self.router_app.get_port(int(kwargs['router_id'], 16),
+                                     int(kwargs['port_no'])))
 
     @rest_route('router', '/router/{router_id}/{port_no}/address',
                 methods=['POST'],
@@ -47,7 +48,8 @@ class RestController(ControllerBase):
         if address is None:
             return error_response(400, 'Empty address.')
         return json_response(self.router_app.set_port_address(address,
-                                                              int(router_id),
+                                                              int(router_id,
+                                                                  16),
                                                               int(port_no)))
 
     @rest_route('router', '/router/{router_id}/{port_no}/address',
@@ -57,7 +59,7 @@ class RestController(ControllerBase):
     def delete_port_address(self, req, **kwargs):
         return json_response(
             self.router_app.delete_port_address(
-                int(kwargs['router_id']),
+                int(kwargs['router_id'], 16),
                 int(kwargs['port_no'])))
 
     @rest_route('router', '/router/routing', methods=['POST'])
