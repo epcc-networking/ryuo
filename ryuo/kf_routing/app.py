@@ -29,6 +29,7 @@ class KFRoutingApp(Ryuo):
         wsgi = kwargs[WSGI_CONTEXT_KEY]
         wsgi.register(_RestController, {APP_CONTEXT_KEY: self})
         self.ports = {}  # dpid -> port_no -> port
+        self.address_cache = {}  # dpid -> port_no -> ip
 
     def get_all_links(self):
         return get_all_link(self)
@@ -38,7 +39,29 @@ class KFRoutingApp(Ryuo):
                 in
                 self.ports[router_id]}
 
-    def set_port_address(self, address, router_id, port_no):
+    def set_port_address_lazy(self, address, router_id, port_no):
+        if router_id not in self.address_cache:
+            self.address_cache[router_id] = {}
+        if port_no not in self.address_cache[router_id]:
+            self.address_cache[router_id][port_no] = {}
+        self.address_cache[router_id][port_no] = address
+
+    def flush_address_cache(self):
+        for router_id in self.address_cache:
+            ips = {}
+            for port_no in self.address_cache[router_id]:
+                nw, mask, ip = self.do_set_port_address(
+                    self.address_cache[router_id][port_no],
+                    router_id,
+                    port_no)
+                ips[port_no] = [nw, mask, ip]
+            self.local_apps[router_id].batch_set_port_address(ips)
+            for port_no in ips:
+                self.send_event_to_observers(EventAddressAdd(Address(
+                    router_id, port_no, ips[port_no][2], ips[port_no][1])))
+        self.address_cache = {}
+
+    def do_set_port_address(self, address, router_id, port_no):
         nw, mask, ip = nw_addr_aton(address)
         # Check address overlap
         for port in self.ports[router_id].values():
@@ -56,12 +79,11 @@ class KFRoutingApp(Ryuo):
 
         self._logger.info('Setting address of %d.%d', router_id, port_no)
         self.ports[router_id][port_no].set_ip(ip, mask, nw)
-        self.local_apps[router_id].set_port_address(port_no, ip, mask, nw)
-        self.send_event_to_observers(
-            EventAddressAdd(Address(router_id, port_no, ip, mask)))
-        return {'dpid': router_id, 'port_no': port_no, 'ip': address}
+        return nw, mask, ip
 
     def routing(self):
+        if len(self.address_cache) != 0:
+            self.flush_address_cache()
         links = self.get_all_links()
         self._logger.debug([link.to_dict() for link in links])
         dpids = self.ports.keys()
@@ -125,9 +147,9 @@ class KFRoutingApp(Ryuo):
                                                    in_port_true_sink))
                     # remove ports with the same true sink as the in_port.
                     self._logger.debug('For in port %s, candidates: %s',
-                                      in_port,
-                                      str([link.to_dict() for link in
-                                           sorted_candidates]))
+                                       in_port,
+                                       str([link.to_dict() for link in
+                                            sorted_candidates]))
 
                     sorted_ports = [link.src.port_no for link in
                                     sorted_candidates]
@@ -148,6 +170,7 @@ class KFRoutingApp(Ryuo):
     @set_ev_cls(EventSwitchLeave)
     def _switch_left(self, event):
         self._logger.info('Router %d down.', event.switch.dpid)
+        self.address_cache = {}
         del self.ports[event.switch.dpid]
 
     @set_ev_cls(EventPortAdd)
@@ -176,9 +199,9 @@ class KFRoutingApp(Ryuo):
         dst_dpid = link.dst.dpid
         src_dpid = link.src.dpid
         while degree[dst_dpid] <= 2 and dst_dpid != ultimate_dst:
-            self._logger.info('src: %d, dst: %d, degree: %d, udst: %d',
-                              src_dpid,
-                              dst_dpid, degree[dst_dpid], ultimate_dst)
+            self._logger.debug('src: %d, dst: %d, degree: %d, udst: %d',
+                               src_dpid,
+                               dst_dpid, degree[dst_dpid], ultimate_dst)
             updated = False
             for olink in graph[dst_dpid].values():
                 if olink is not None and olink.dst.dpid != src_dpid:
@@ -188,7 +211,7 @@ class KFRoutingApp(Ryuo):
                     break
             if not updated:
                 break
-        self._logger.info('True sink: %d', dst_dpid)
+        self._logger.debug('True sink: %d', dst_dpid)
         return dst_dpid
 
     @staticmethod
@@ -197,7 +220,7 @@ class KFRoutingApp(Ryuo):
 
     @staticmethod
     def compare_link(l1, l2, level, degree, in_port, candidate_sinks,
-                      in_port_sink):
+                     in_port_sink):
         if l1.src.port_no == in_port:
             return 1
         if l2.src.port_no == in_port:
@@ -225,9 +248,9 @@ class _RestController(ControllerBase):
         address = eval(req.body).get('address')
         if address is None:
             return error_response(400, 'Empty address')
-        return json_response(self.app.set_port_address(address,
-                                                       int(router_id, 16),
-                                                       int(port_no)))
+        self.app.set_port_address_lazy(address, int(router_id, 16),
+                                       int(port_no))
+        return json_response({'success': True})
 
     @rest_route('router', '/router/{router_id}',
                 methods=['GET'],

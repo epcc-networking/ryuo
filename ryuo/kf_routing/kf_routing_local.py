@@ -59,6 +59,15 @@ class KFRoutingLocal(LocalController):
         return group.id
 
     @expose
+    def batch_set_port_address(self, ips):
+        for port_no in ips:
+            ip_data = ips[port_no]
+            nw = ip_data[0]
+            mask = ip_data[1]
+            ip = ip_data[2]
+            self.set_port_address.lock_free(self, port_no, ip, mask, nw)
+
+    @expose
     def set_port_address(self, port_no, ip, mask, nw):
         if port_no not in self.ports.keys():
             return None
@@ -85,7 +94,6 @@ class KFRoutingLocal(LocalController):
                           0)
         # Send GARP
         self.send_arp_request(ip, ip)
-        return {'ip': ip, 'mask': mask, 'nw': nw}
 
     def send_arp_request(self, src_ip, dst_ip, in_port=None, port=None):
         ports = [port]
