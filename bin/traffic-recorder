@@ -1,0 +1,38 @@
+#!/usr/bin/env python2
+import argparse
+from grp import getgrnam
+from os import setuid, setgid
+from pwd import getpwnam
+import subprocess
+import time
+
+
+def as_normal_user(user, grp):
+    setgid(getgrnam(grp).gr_gid)
+    setuid(getpwnam(user).pw_uid)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Record traffic on lo.')
+    parser.add_argument('-c1', '--command1', help='command 1 to run',
+                        action='store', required=True)
+    parser.add_argument('-c2', '--command2', help='comman 2 to run',
+                        action='store', required=True)
+    parser.add_argument('-t', '--time', help='time to record', action='store',
+                        default=50, type=int)
+    parser.add_argument('-o', '--output', help='record file name',
+                        action='store', required=True)
+    parser.add_argument('-u', '--tshark-user', help='user to run tshark',
+                        default='root')
+    parser.add_argument('-g', '--tshark-group', help='group to run tshark',
+                        default='wireshark')
+    args = parser.parse_args()
+    tshark = subprocess.Popen(['tshark', '-i', 'lo', '-w', args.output],
+                              preexec_fn=lambda: as_normal_user(
+                                  args.tshark_user, args.tshark_group))
+    command1 = subprocess.Popen(args.command1.split(' '))
+    command2 = subprocess.Popen(args.command2.split(' '))
+    time.sleep(args.time)
+    tshark.kill()
+    command1.kill()
+    command2.kill()
