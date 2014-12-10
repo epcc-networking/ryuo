@@ -156,8 +156,8 @@ class KFRoutingApp(Ryuo):
                     output_ports = list(sorted_ports)
                     group_id = router.add_group(in_port, output_ports)
                     router.add_routes(dst_ips, group_id)
-                    self._logger.info('%s from port %d to ports %s',
-                                      dst_ips, in_port, group_id)
+                    self._logger.debug('%s from port %d to ports %s',
+                                       dst_ips, in_port, group_id)
         return {router: self.get_router(router) for router in self.ports}
 
     @set_ev_cls(EventSwitchEnter)

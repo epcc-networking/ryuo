@@ -61,9 +61,13 @@ class RyuoTopoFromTopoZoo(Topo):
         :param link:
         :return:
         """
-        self.addLink(switches[node1['id']],
-                     switches[node2['id']],
-                     delay='%dms' % self._get_latency(node1, node2))
+        if 'Latitude' in node1 and 'Longitude' in node1 and \
+                        'Latitude' in node2 and 'Longitude' in node2:
+            self.addLink(switches[node1['id']],
+                         switches[node2['id']],
+                         delay='%dms' % self._get_latency(node1, node2))
+        else:
+            self.addLink(switches[node1['id']], switches[node2['id']])
 
     def _add_switch(self, node, controller_dir, ryu_args, protocols):
         return self.addSwitch('s%d' % (1 + node['id']),

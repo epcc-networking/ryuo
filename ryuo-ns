@@ -5,6 +5,7 @@ import subprocess
 if __name__ == '__main__':
     env = os.environ
     env['PYRO_SERIALIZERS_ACCEPTED'] = 'serpent,pickle'
+    env['PYRO_THREADPOOL_SIZE'] = '120'
     ryuo_ns = subprocess.call(
         ['python2', '-m', 'Pyro4.naming', '-n', 'localhost'], env=env)
 

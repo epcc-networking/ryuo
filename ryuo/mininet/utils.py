@@ -14,8 +14,10 @@ def assign_ip_to_switches(begin_net, net, ips=None):
         dpid2 = int(intf2.node.dpid, 16)
         port1 = intf1.node.ports[intf1]
         port2 = intf2.node.ports[intf2]
-        ips.append(['10.0.%d.1/24' % begin_net, dpid1, port1])
-        ips.append(['10.0.%d.2/24' % begin_net, dpid2, port2])
+        n1 = begin_net / 200
+        n2 = begin_net % 200
+        ips.append(['10.%d.%d.1/24' % (n1, n2), dpid1, port1])
+        ips.append(['10.%d.%d.2/24' % (n1, n2), dpid2, port2])
         begin_net += 1
     return begin_net, ips
 
@@ -33,9 +35,11 @@ def attach_host_to_switches(begin_net, net, ips=None):
     for switch in net.switches:
         host = net.addHost('h%d' % int(switch.dpid, 16))
         link = net.addLink(switch, host)
-        ips.append(['10.0.%d.1/24' % begin_net, int(switch.dpid, 16),
+        n1 = begin_net / 200
+        n2 = begin_net % 200
+        ips.append(['10.%d.%d.1/24' % (n1, n2), int(switch.dpid, 16),
                     switch.ports[link.intf1]])
-        host.setIP('10.0.%d.2' % begin_net, 24)
-        host.setDefaultRoute('via 10.0.%d.1' % begin_net)
+        host.setIP('10.%d.%d.2' % (n1, n2), 24)
+        host.setDefaultRoute('via 10.%d.%d.1' % (n1, n2))
         begin_net += 1
     return begin_net, ips

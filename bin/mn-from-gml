@@ -1,66 +1,23 @@
 #!/usr/bin/env python2
-import os
-import subprocess
-import argparse
-import time
 
 from mininet.cli import CLI
-from mininet.link import TCLink
-from mininet.net import Mininet
-from mininet.node import RemoteController, OVSSwitch
 
-from ryuo.mininet.node import RyuoOVSSwitch
-from ryuo.mininet.topology import RyuoTopoFromTopoZoo
-from ryuo.mininet.utils import assign_ip_to_switches, attach_host_to_switches
-from ryuo.tests.utils import add_addresses
+from ryuo.tests.utils import mn_from_gml, mn_from_gml_argparser
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Create Mininet topology from gml file.')
-    parser.add_argument('-g', '--gml-file', help='GML topology description',
-                        action='store', required=True)
-    parser.add_argument('-o', '--openflow', help='OpenFlow version',
-                        action='store', default='OpenFlow13')
-    parser.add_argument('-l', '--local-apps', help='local ryu apps to run',
-                        action='store', nargs='+')
-    parser.add_argument('-d', '--local-app-dir', help='Location of local apps',
-                        action='store', default=os.getcwd())
-    parser.add_argument('-a', '--assign-ip', action='store_true',
-                        help="assign IPs to switch ports")
-    parser.add_argument('-e', '--end-hosts', action='store_true',
-                        help='attach host to each switch')
-    parser.add_argument('-n', '--normal', action='store_true',
-                        help="don't use ryuo local controller")
-    parser.add_argument('-c', '--ryuo-ip', action='store', default='127.0.0.1',
-                        help='IP address of Ryuo controller')
-
-    args = parser.parse_args()
-    RyuoOVSSwitch.setup()
-    subprocess.call(['mn', '-c'])
-    if args.normal:
-        net = Mininet(topo=RyuoTopoFromTopoZoo(args.gml_file,
-                                               args.openflow,
-                                               args.local_app_dir),
-                      switch=OVSSwitch,
-                      controller=RemoteController,
-                      link=TCLink)
-    else:
-        net = Mininet(topo=RyuoTopoFromTopoZoo(args.gml_file,
-                                               args.openflow,
-                                               args.local_app_dir,
-                                               ' '.join(args.local_apps)),
-                      switch=RyuoOVSSwitch,
-                      controller=RemoteController,
-                      link=TCLink)
-    net_num = 1
-    ips = []
-    if args.assign_ip:
-        net_num, ips = assign_ip_to_switches(net_num, net, ips)
-    if args.assign_ip and args.end_hosts:
-        net_num, ips = attach_host_to_switches(net_num, net, ips)
-    net.start()
-    time.sleep(20)
-    add_addresses(ips, args.ryuo_ip)
-    CLI(net)
+    args = mn_from_gml_argparser().parse_args()
+    net = mn_from_gml(normal=args.normal,
+                      assign_ip=args.assign_ip,
+                      end_hosts=args.end_hosts,
+                      routing=args.request_routing,
+                      ryuo_ip=args.ryuo_ip,
+                      gml_file=args.gml_file,
+                      openflow=args.openflow,
+                      local_app_dir=args.local_app_dir,
+                      local_apps=args.local_apps,
+                      ping_all=args.ping_all,
+                      mn_wait=args.wait_for_mininet)
+    if not args.no_cli:
+        CLI(net)
     net.stop()

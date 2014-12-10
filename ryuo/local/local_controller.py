@@ -36,6 +36,7 @@ class LocalController(app_manager.RyuApp):
         self.uri = self._rpc_daemon.register(self)
         self._ns = Pyro4.locateNS()
         host_uri = self._ns.lookup(self.ryuo_name)
+        self._ns._pyroRelease()
         self.ryuo = Pyro4.Proxy(host_uri)
         self._logger.info('%s host uri: %s', self.ryuo_name, host_uri)
         self.ryuo.ryuo_register(self.uri)
@@ -53,6 +54,7 @@ class LocalController(app_manager.RyuApp):
 
     def _switch_enter(self, dp):
         self.app_name = "%s-%d" % (self.__class__.__name__, dp.id)
+        self._ns._pyroReconnect()
         self._ns.register(self.app_name, self.uri)
         self._ns._pyroRelease()
         self._setup_logger(dp.id)
@@ -64,7 +66,9 @@ class LocalController(app_manager.RyuApp):
 
     def _switch_leave(self):
         self.ryuo.ryuo_switch_leave(self.dp.id, self.uri)
+        self._ns._pyroReconnect()
         self._ns.remove(self.app_name)
+        self._ns._pyroRelease()
         self.app_name = None
         self.ofctl = None
         self.dp = None

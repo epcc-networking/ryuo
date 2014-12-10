@@ -78,10 +78,10 @@ class KFRouting(Routing):
                                                    candidate_true_sinks,
                                                    in_port_true_sink))
                     # remove ports with the same true sink as the in_port.
-                    self._logger.info('For in port %s, candidates: %s',
-                                      in_port,
-                                      str([link.to_dict() for link in
-                                           sorted_candidates]))
+                    self._logger.debug('For in port %s, candidates: %s',
+                                       in_port,
+                                       str([link.to_dict() for link in
+                                            sorted_candidates]))
 
                     sorted_ports = [link.src.port_no for link in
                                     sorted_candidates]
@@ -95,7 +95,7 @@ class KFRouting(Routing):
                                                 sorted_ports,
                                                 output_ports)
                     for dst_str in dst_ips:
-                        self._logger.info(
+                        self._logger.debug(
                             '%s from port %d to ports %s group_id %d',
                             dst_str, in_port, str(sorted_ports), group_id
                         )
@@ -114,15 +114,19 @@ class KFRouting(Routing):
         dst_dpid = link.dst.dpid
         src_dpid = link.src.dpid
         while degree[dst_dpid] <= 2 and dst_dpid != ultimate_dst:
-            self._logger.info('src: %d, dst: %d, degree: %d, udst: %d',
+            self._logger.debug('src: %d, dst: %d, degree: %d, udst: %d',
                               src_dpid,
                               dst_dpid, degree[dst_dpid], ultimate_dst)
+            updated = False
             for olink in graph[dst_dpid].values():
                 if olink is not None and olink.dst.dpid != src_dpid:
                     src_dpid = dst_dpid
                     dst_dpid = olink.dst.dpid
+                    updated = True
                     break
-        self._logger.info('True sink: %d', dst_dpid)
+            if not updated:
+                break
+        self._logger.debug('True sink: %d', dst_dpid)
         return dst_dpid
 
     def get_routing_data_by_dst_ip(self, dpid, dst_ip):

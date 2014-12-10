@@ -14,10 +14,8 @@ def as_normal_user(user, grp):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Record traffic on lo.')
-    parser.add_argument('-c1', '--command1', help='command 1 to run',
-                        action='store', required=True)
-    parser.add_argument('-c2', '--command2', help='comman 2 to run',
-                        action='store', required=True)
+    parser.add_argument('-b', '--before-commands', action='store', nargs='+',
+                        help='commands run before mininet', required=True)
     parser.add_argument('-t', '--time', help='time to record', action='store',
                         default=50, type=int)
     parser.add_argument('-o', '--output', help='record file name',
@@ -26,13 +24,15 @@ if __name__ == '__main__':
                         default='root')
     parser.add_argument('-g', '--tshark-group', help='group to run tshark',
                         default='wireshark')
+
     args = parser.parse_args()
     tshark = subprocess.Popen(['tshark', '-i', 'lo', '-w', args.output],
                               preexec_fn=lambda: as_normal_user(
                                   args.tshark_user, args.tshark_group))
-    command1 = subprocess.Popen(args.command1.split(' '))
-    command2 = subprocess.Popen(args.command2.split(' '))
+    before_commands = [subprocess.Popen(command.split(' '))
+                       for command in args.before_commands]
     time.sleep(args.time)
     tshark.kill()
-    command1.kill()
-    command2.kill()
+    subprocess.call(['mn', '-c'])
+    for command in before_commands:
+        command.kill()
