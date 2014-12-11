@@ -1,4 +1,6 @@
+from grp import getgrnam
 import os
+from pwd import getpwnam
 import re
 import subprocess
 import time
@@ -71,6 +73,7 @@ def mn_from_gml(normal, assign_ip, end_hosts, routing, ryuo_ip, mn_wait,
     add_addresses(ips, ryuo_ip)
     if routing:
         request_routing(ryuo_ip)
+        time.sleep(5)
     if ping_all:
         net.pingAll()
     return net
@@ -109,3 +112,17 @@ def mn_from_gml_argparser():
 def parse_tshark_stats(outputs):
     lines = outputs.split('\n')
     return int(lines[-3].split('|')[-2])
+
+
+def as_normal_user(user, grp):
+    os.setgid(getgrnam(grp).gr_gid)
+    os.setuid(getpwnam(user).pw_uid)
+
+
+def run_tshark_stats(pcap_file, stat, field, user):
+    return subprocess.Popen(
+        ['tshark',
+         '-r', pcap_file,
+         '-qz', 'io,stat,0,%s&&%s' % (stat, field)],
+        stdout=subprocess.PIPE,
+        preexec_fn=lambda: as_normal_user(user, 'wireshark'))

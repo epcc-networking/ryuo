@@ -1,15 +1,10 @@
 #!/usr/bin/env python2
 import argparse
-from grp import getgrnam
-from os import setuid, setgid
-from pwd import getpwnam
+import os
 import subprocess
 import time
 
-
-def as_normal_user(user, grp):
-    setgid(getgrnam(grp).gr_gid)
-    setuid(getpwnam(user).pw_uid)
+from ryuo.tests.utils import as_normal_user
 
 
 if __name__ == '__main__':
@@ -26,9 +21,12 @@ if __name__ == '__main__':
                         default='wireshark')
 
     args = parser.parse_args()
+    null_file = open(os.devnull, 'w')
     tshark = subprocess.Popen(['tshark', '-i', 'lo', '-w', args.output],
                               preexec_fn=lambda: as_normal_user(
-                                  args.tshark_user, args.tshark_group))
+                                  args.tshark_user, args.tshark_group),
+                              stdout=null_file,
+                              stderr=null_file)
     before_commands = [subprocess.Popen(command.split(' '))
                        for command in args.before_commands]
     time.sleep(args.time)
@@ -36,3 +34,4 @@ if __name__ == '__main__':
     subprocess.call(['mn', '-c'])
     for command in before_commands:
         command.kill()
+    null_file.close()

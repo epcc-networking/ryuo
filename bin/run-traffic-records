@@ -5,8 +5,11 @@ from os.path import join
 from os.path import isfile
 import subprocess
 import time
+import json
 
 from networkx import read_gml
+
+from ryuo.tests.utils import parse_tshark_stats, run_tshark_stats
 
 
 if __name__ == '__main__':
@@ -60,6 +63,50 @@ if __name__ == '__main__':
         if ryuo_ns is not None:
             ryuo_ns.kill()
 
-        time.sleep(10)
+        total_filter = '!(http or tcp.port<6800)'
+        if args.controller_type == 'ryu':
+            total_filter = '!(http)'
+
+        results = {}
+
+        count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                       total_filter, args.user)
+        out, dummy = count_frame.communicate()
+        results['total_frame'] = parse_tshark_stats(out)
+
+        sum_tcp = run_tshark_stats(pcap_file, 'SUM(tcp.len)tcp.len',
+                                   total_filter, args.user)
+        out, dummy = sum_tcp.communicate()
+        results['total_tcp'] = parse_tshark_stats(out)
+
+        if args.controller_type == 'ryu':
+            packet_in_out_filter = '(openflow_v4.type==10 || ' \
+                                   'openflow_v4.type==13)'
+            count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                           packet_in_out_filter, args.user)
+            out, dummy = count_frame.communicate()
+            results['packet_in_out_frame'] = parse_tshark_stats(out)
+
+            sum_tcp = run_tshark_stats(pcap_file, 'SUM(tcp.len)tcp.len',
+                                       packet_in_out_filter, args.user)
+            out, dummy = sum_tcp.communicate()
+            results['packet_in_out_tcp'] = parse_tshark_stats(out)
+
+            flow_group_mod_filter = '(openflow_v4.type==14 || ' \
+                                    'openflow_v4.type==15)'
+            count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                           flow_group_mod_filter, args.user)
+            out, dummy = count_frame.communicate()
+            results['flow_group_mod_frame'] = parse_tshark_stats(out)
+
+            sum_tcp = run_tshark_stats(pcap_file, 'SUM(tcp.len)tcp.len',
+                                       flow_group_mod_filter, args.user)
+            out, dummy = sum_tcp.communicate()
+            results['flow_group_mod_tcp'] = parse_tshark_stats(out)
+
+        with open(pcap_file.split('.')[0] + '.json', 'w') as f:
+            f.write(json.dumps(results))
+
+        time.sleep(5)
 
 

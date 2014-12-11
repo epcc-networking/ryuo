@@ -1,0 +1,28 @@
+#!/usr/bin/env python2
+import argparse
+import copy
+from os import listdir
+from os.path import isfile
+from os.path import join
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='parse pcap to get stats')
+    parser.add_argument('-d', '--pcap-dir', action='store', required=True,
+                        help='pcap file dir')
+
+    args = parser.parse_args()
+    results = [f for f in listdir(args.pcap_dir) if
+               isfile(join(args.pcap_dir, f)) and f.endswith('.json')]
+
+    # type -> edge_num -> [frames]
+    edges_frame = {'ryu-total': {}, 'ryuo-total': {},
+                   'ryu-packet-in-out': {}, 'ryu-flow-group-mod': {}}
+    # type -> node_num -> [frames]
+    nodes_frame = copy.deepcopy(edges_frame)
+    edges_tcp = copy.deepcopy(edges_frame)
+    nodes_tcp = copy.deepcopy(edges_frame)
+    for result in results:
+        name_parts = result.split('.')[0].split('-')
+        controller_type = name_parts[0]
+        app = name_parts[1]
+
