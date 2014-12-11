@@ -111,7 +111,7 @@ def mn_from_gml_argparser():
 
 def parse_tshark_stats(outputs):
     lines = outputs.split('\n')
-    return int(lines[-3].split('|')[-2])
+    return int(lines[-3].split('|')[-3])
 
 
 def as_normal_user(user, grp):
