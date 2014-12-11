@@ -1,0 +1,65 @@
+#!/usr/bin/env python2
+import argparse
+from os import listdir
+from os.path import join
+from os.path import isfile
+import subprocess
+import time
+
+from networkx import read_gml
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='run traffic records on all topos in dir')
+    parser.add_argument('-d', '--topo-dir', action='store', required=True,
+                        help='topo gml file dir')
+    parser.add_argument('-l', '--node-limit', action='store', type=int,
+                        default=130, help='only run gml with limited nodes')
+    parser.add_argument('-t', '--controller-type', action='store',
+                        default='ryuo', help='ryu or ryuo')
+    parser.add_argument('-a', '--apps', action='store', nargs='+',
+                        required=True, help='controller apps')
+    parser.add_argument('-p', '--local-apps', action='store', nargs='+',
+                        help='local apps to run', default=[])
+    parser.add_argument('-n', '--name', action='store', required=True,
+                        help='record name')
+    parser.add_argument('-u', '--user', action='store', required=True,
+                        help='user to run tshark')
+    args = parser.parse_args()
+
+    topo_dir = args.topo_dir
+    gmls = [f for f in listdir(topo_dir) if
+            isfile(join(topo_dir, f)) and f.endswith('.gml')]
+    for gml in gmls:
+        ryuo_ns = None
+        if args.controller_type == 'ryuo':
+            ryuo_ns = subprocess.Popen(['ryuo-ns'])
+
+        full_path = join(topo_dir, gml)
+        graph = read_gml(full_path)
+        if len(graph.node) > args.node_limit:
+            continue
+        num_nodes = len(graph.node)
+        num_edges = len(graph.edge)
+
+        pcap_file = '%s-%s-%s.pcap' % (
+            args.controller_type, args.name, gml.split('.')[0].lower())
+        mn_command = 'bin/mn-from-gml -a -e -g %s -l %s -p -r -w 200' % (
+            full_path, ' '.join(args.local_apps))
+        if args.controller_type == 'ryu':
+            mn_command = 'bin/mn-from-gml -n -a -e -g %s -p -r -w 200' % \
+                         full_path
+        subprocess.call(['bin/traffic-recorder',
+                         '-b', 'ryu-manager %s' % ' '.join(args.apps),
+                         mn_command,
+                         '-t', '600',
+                         '-o', pcap_file,
+                         '-u', args.user])
+
+        if ryuo_ns is not None:
+            ryuo_ns.kill()
+
+        time.sleep(10)
+
+

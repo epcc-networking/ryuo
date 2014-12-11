@@ -14,7 +14,7 @@ from ryuo.utils import config_logger, lock_class, expose
 Pyro4.config.REQUIRE_EXPOSE = True
 Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
-Pyro4.config.THREADPOOL_SIZE = 120
+Pyro4.config.THREADPOOL_SIZE = 160
 
 
 @lock_class([], Lock)

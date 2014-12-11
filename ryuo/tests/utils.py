@@ -104,3 +104,8 @@ def mn_from_gml_argparser():
     parser.add_argument('-w', '--wait-for-mininet', type=int, default=20,
                         help='seconds to wait mininet')
     return parser
+
+
+def parse_tshark_stats(outputs):
+    lines = outputs.split('\n')
+    return int(lines[-3].split('|')[-2])
