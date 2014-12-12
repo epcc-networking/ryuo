@@ -249,7 +249,7 @@ class _RestController(ControllerBase):
         if address is None:
             return error_response(400, 'Empty address')
         self.app.set_port_address_lazy(address, int(router_id, 16),
-                                       int(port_no))
+                                       int(port_no, 16))
         return json_response({'success': True})
 
     @rest_route('router', '/router/{router_id}',

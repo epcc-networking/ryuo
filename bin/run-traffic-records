@@ -43,8 +43,10 @@ if __name__ == '__main__':
         graph = read_gml(full_path)
         if len(graph.node) > args.node_limit:
             continue
-        num_nodes = len(graph.node)
-        num_edges = len(graph.edge)
+
+        results = {'num_nodes': len(graph.node),
+                   'num_edges': sum(
+                       [len(node) for node in graph.edge.values()]) / 2}
 
         pcap_file = '%s-%s-%s.pcap' % (
             args.controller_type, args.name, gml.split('.')[0].lower())
@@ -66,8 +68,6 @@ if __name__ == '__main__':
         total_filter = '!(http or tcp.port<6800)'
         if args.controller_type == 'ryu':
             total_filter = '!(http)'
-
-        results = {}
 
         count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
                                        total_filter, args.user)

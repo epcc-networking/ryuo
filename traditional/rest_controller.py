@@ -36,7 +36,7 @@ class RestController(ControllerBase):
     def get_port(self, req, **kwargs):
         return json_response(
             self.router_app.get_port(int(kwargs['router_id'], 16),
-                                     int(kwargs['port_no'])))
+                                     int(kwargs['port_no'], 16)))
 
     @rest_route('router', '/router/{router_id}/{port_no}/address',
                 methods=['POST'],
@@ -50,7 +50,8 @@ class RestController(ControllerBase):
         return json_response(self.router_app.set_port_address(address,
                                                               int(router_id,
                                                                   16),
-                                                              int(port_no)))
+                                                              int(port_no,
+                                                                  16)))
 
     @rest_route('router', '/router/{router_id}/{port_no}/address',
                 methods=['DELETE'],
@@ -60,7 +61,7 @@ class RestController(ControllerBase):
         return json_response(
             self.router_app.delete_port_address(
                 int(kwargs['router_id'], 16),
-                int(kwargs['port_no'])))
+                int(kwargs['port_no'], 16)))
 
     @rest_route('router', '/router/routing', methods=['POST'])
     def routing(self, req, **kwargs):

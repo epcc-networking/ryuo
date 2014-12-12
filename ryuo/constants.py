@@ -12,7 +12,7 @@ DEFAULT_TTL = 64
 ARP_REPLY_TIMER = 2  # sec
 IDLE_TIMEOUT = 1800  # sec
 
-PORTNO_PATTERN = r'[0-9]{1,8}|all'
+PORTNO_PATTERN = r'[0-9a-f]{1,8}|all'
 ROUTER_ID_PATTERN = dpid_lib.DPID_PATTERN + r'|all'
 
 UINT16_MAX = 0xffff
