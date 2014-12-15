@@ -4,25 +4,107 @@ import copy
 from os import listdir
 from os.path import isfile
 from os.path import join
+import json
+
+from matplotlib import pyplot
+
+
+def is_app(app_name, file_name):
+    return file_name.split('-')[1] == app_name
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='parse pcap to get stats')
-    parser.add_argument('-d', '--pcap-dir', action='store', required=True,
-                        help='pcap file dir')
+    parser.add_argument('-d', '--stats-dir', action='store', required=True,
+                        help='tshark stats file dir')
+    parser.add_argument('-a', '--app-name', action='store', required=True,
+                        help='controller application name')
 
     args = parser.parse_args()
-    results = [f for f in listdir(args.pcap_dir) if
-               isfile(join(args.pcap_dir, f)) and f.endswith('.json')]
+    results = [f for f in listdir(args.stats_dir) if
+               isfile(join(args.stats_dir, f)) and f.endswith('.json')
+               and is_app(args.app_name, f)]
 
-    # type -> edge_num -> [frames]
+    # type -> app -> edge_num -> [frames]
     edges_frame = {'ryu-total': {}, 'ryuo-total': {},
                    'ryu-packet-in-out': {}, 'ryu-flow-group-mod': {}}
-    # type -> node_num -> [frames]
+    # type -> app -> node_num -> [frames]
     nodes_frame = copy.deepcopy(edges_frame)
     edges_tcp = copy.deepcopy(edges_frame)
     nodes_tcp = copy.deepcopy(edges_frame)
+
+    fig = pyplot.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
     for result in results:
         name_parts = result.split('.')[0].split('-')
         controller_type = name_parts[0]
-        app = name_parts[1]
+        topo_name = name_parts[2]
+        with open(join(args.stats_dir, result), 'r') as f:
+            res = json.load(f)
+            num_edges = res['num_edges']
+            num_nodes = res['num_nodes']
+            if controller_type == 'ryu':
+                if num_edges not in edges_frame['ryu-total']:
+                    edges_frame['ryu-total'][num_edges] = []
+                    edges_frame['ryu-packet-in-out'][num_edges] = []
+                    edges_frame['ryu-flow-group-mod'][num_edges] = []
+                    edges_tcp['ryu-total'][num_edges] = []
+                    edges_tcp['ryu-packet-in-out'][num_edges] = []
+                    edges_tcp['ryu-flow-group-mod'][num_edges] = []
+                if num_nodes not in nodes_frame['ryu-total']:
+                    nodes_frame['ryu-total'][num_nodes] = []
+                    nodes_frame['ryu-packet-in-out'][num_nodes] = []
+                    nodes_frame['ryu-flow-group-mod'][num_nodes] = []
+                    nodes_tcp['ryu-total'][num_nodes] = []
+                    nodes_tcp['ryu-packet-in-out'][num_nodes] = []
+                    nodes_tcp['ryu-flow-group-mod'][num_nodes] = []
+
+                nodes_frame['ryu-total'][num_nodes].append(res['total_frame'])
+                edges_frame['ryu-total'][num_edges].append(res['total_frame'])
+
+                nodes_frame['ryu-packet-in-out'][num_nodes].append(
+                    res['packet_in_out_frame'])
+                edges_frame['ryu-packet-in-out'][num_edges].append(
+                    res['packet_in_out_frame'])
+
+                nodes_frame['ryu-flow-group-mod'][num_nodes].append(
+                    res['flow_group_mod_frame'])
+                edges_frame['ryu-flow-group-mod'][num_edges].append(
+                    res['flow_group_mod_frame'])
+
+                nodes_tcp['ryu-total'][num_nodes].append(res['total_tcp'])
+                edges_tcp['ryu-total'][num_edges].append(res['total_tcp'])
+
+                nodes_tcp['ryu-packet-in-out'][num_nodes].append(
+                    res['packet_in_out_tcp'])
+                edges_tcp['ryu-packet-in-out'][num_edges].append(
+                    res['packet_in_out_tcp'])
+
+                nodes_tcp['ryu-flow-group-mod'][num_nodes].append(
+                    res['flow_group_mod_tcp'])
+                edges_tcp['ryu-flow-group-mod'][num_edges].append(
+                    res['flow_group_mod_tcp'])
+
+                ax.scatter(num_edges, num_nodes, res['total_tcp'], c='r',
+                           marker='o')
+                ax.scatter(num_edges, num_nodes, res['packet_in_out_tcp'],
+                           c='g', marker='^')
+                ax.scatter(num_edges, num_nodes, res['flow_group_mod_tcp'],
+                           c='b', marker='*')
+
+    ax.set_xlabel('Num Edges')
+    ax.set_ylabel('Num Nodes')
+    ax.set_zlabel('Total Tcp (byte)')
+
+    pyplot.show()
+
+
+
+
+
+
+
+
+
 

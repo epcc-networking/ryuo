@@ -32,8 +32,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     topo_dir = args.topo_dir
-    gmls = [f for f in listdir(topo_dir) if
-            isfile(join(topo_dir, f)) and f.endswith('.gml')]
+    gmls = sorted([f for f in listdir(topo_dir) if
+                   isfile(join(topo_dir, f)) and f.endswith('.gml')])
     for gml in gmls:
         ryuo_ns = None
         if args.controller_type == 'ryuo':
