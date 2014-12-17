@@ -36,6 +36,7 @@ class KFRoutingLocal(LocalController):
         self.disabled_failover_ports = None
         self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
+        self.pending_arps = _PendingArps(self)
 
     @expose
     def add_route(self, dst_ip, group_id):
@@ -93,20 +94,22 @@ class KFRoutingLocal(LocalController):
         self._logger.info('Set L2 switching (normal) flow [cookie=0x%x]',
                           0)
         # Send GARP
-        self.send_arp_request(ip, ip)
+        self.send_arp(ip, ip, port=port_no, code=ARP_REQUEST)
+        self.send_arp(ip, ip, port=port_no, code=ARP_REPLY)
 
-    def send_arp_request(self, src_ip, dst_ip, in_port=None, port=None):
-        ports = [port]
+    def send_arp(self, src_ip, dst_ip, in_port=None, port=None,
+                 code=ARP_REQUEST):
+        ports = [self.ports[port]]
         if port is None:
-            ports = self.ports
-        for send_port in ports.values():
+            ports = self.ports.values()
+        for send_port in ports:
             if in_port is None or in_port != send_port.port_no:
                 src_mac = send_port.mac
                 dst_mac = mac_lib.BROADCAST_STR
                 arp_target_mac = mac_lib.DONTCARE_STR
                 inport = self.ofctl.dp.ofproto.OFPP_CONTROLLER
                 output_port = send_port.port_no
-                self.ofctl.send_arp(ARP_REQUEST, src_mac, dst_mac, src_ip,
+                self.ofctl.send_arp(code, src_mac, dst_mac, src_ip,
                                     dst_ip, arp_target_mac, inport,
                                     output_port)
 
@@ -130,7 +133,8 @@ class KFRoutingLocal(LocalController):
                     self._logger.warning('Unsupported ICMP type, ignore.')
                 elif TCP in headers or UDP in headers:
                     return self._packet_in_tcp_udp(msg, headers)
-            return self._packet_in_to_node(msg, headers)
+            else:
+                return self._packet_in_to_node(msg, headers)
 
     @set_ev_cls(EventPortDelete)
     def _on_port_deleted(self, ev):
@@ -205,7 +209,8 @@ class KFRoutingLocal(LocalController):
         src_port = self.ports.get_by_ip(headers[ARP].src_ip)
         if src_port is None:
             return
-        self._learn_host_mac(msg, headers)
+        if self.arp_table.get(headers[ARP].src_ip) is None:
+            self._learn_host_mac(msg, headers)
         in_port = self.ofctl.get_packet_in_inport(msg)
         src_ip = headers[ARP].src_ip
         dst_ip = headers[ARP].dst_ip
@@ -223,6 +228,7 @@ class KFRoutingLocal(LocalController):
                                 self.dp.ofproto.OFPP_CONTROLLER,
                                 in_port)
         elif headers[ARP].opcode == ARP_REPLY:
+            self.pending_arps.delete(src_ip)
             packet_list = self.packet_buffer.get_data(src_ip)
             if packet_list:
                 for suspend_packet in packet_list:
@@ -248,7 +254,7 @@ class KFRoutingLocal(LocalController):
                                     src_mac=dst_mac,
                                     dst_mac=src_mac,
                                     nw_dst=src_ip,
-                                    # idle_timeout=ARP_EXPIRE_SECOND,
+                                    idle_timeout=ARP_EXPIRE_SECOND,
                                     dec_ttl=True)
         self._logger.info('Set implicit routing flow to %s', src_ip)
 
@@ -290,6 +296,8 @@ class KFRoutingLocal(LocalController):
                               ICMP_DEST_UNREACH,
                               ICMP_PORT_UNREACH_CODE,
                               msg_data=msg.data)
+        self._logger.info('Receive TCP/UDP from %s, sending icmp unreachable',
+                          headers[IPV4].src)
 
     def _packet_in_to_node(self, msg, headers):
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
@@ -303,12 +311,13 @@ class KFRoutingLocal(LocalController):
             if self.arp_table.get(dst_ip) is not None:
                 self._logger.debug('Find mac in arp table')
                 self.ofctl.send_packet_out(in_port,
-                                           port,
+                                           port.port_no,
                                            msg.data)
             else:
                 self.packet_buffer.add(in_port, headers, msg.data)
-                self.send_arp_request(out_ip, dst_ip, in_port=in_port)
-                self._logger.info('Send ARP request for %s', dst_ip)
+                if not self.pending_arps.contains(dst_ip):
+                    self._logger.info('Send ARP request for %s', dst_ip)
+                    self.pending_arps.add(dst_ip, out_ip, port.port_no)
         else:
             self._logger.warning('Unknown dst ip %s', dst_ip)
 
@@ -327,7 +336,7 @@ class KFRoutingLocal(LocalController):
         return self._send_icmp_unreachable_error(suspended_packet.in_port,
                                                  suspended_packet.header_list,
                                                  suspended_packet.data,
-                                                 suspended_packet.dst_ip)
+                                                 suspended_packet.src_ip)
 
     def _get_send_port_ip(self, headers):
         if IPV4 in headers:
@@ -417,6 +426,40 @@ def _get_priority(priority_type, vid=0, route=None):
     return priority, log_msg
 
 
+class _PendingArps(object):
+    def __init__(self, app):
+        super(_PendingArps, self).__init__()
+        self.items = []
+        self.app = app
+
+    def add(self, ip, out_ip, out_port):
+        self.items.append(_ArpRequest(ip, self, out_ip, out_port))
+
+    def delete(self, ip):
+        to_delete = [item for item in self.items if item.ip == ip]
+        if len(to_delete) == 0:
+            return
+        hub.kill(to_delete[0].wait_thread)
+        self.items = [item for item in self.items if item.ip != ip]
+
+    def contains(self, ip):
+        return len([item for item in self.items if item.ip == ip]) != 0
+
+
+class _ArpRequest(object):
+    def __init__(self, ip, parent, out_ip, out_port):
+        self.ip = ip
+        self.parent = parent
+        self.out_ip = out_ip
+        self.out_port = out_port
+        self.wait_thread = hub.spawn(self.timer)
+
+    def timer(self):
+        for i in range(0, 5):
+            self.parent.app.send_arp(self.out_ip, self.ip, port=self.out_port)
+            time.sleep(1)
+
+
 class _SuspendPacketList(list):
     def __init__(self, timeout_function):
         super(_SuspendPacketList, self).__init__()
@@ -435,9 +478,12 @@ class _SuspendPacketList(list):
             del_list = [pkt for pkt in self if pkt.dst_ip in del_addr]
 
         for pkt in del_list:
-            self.remove(pkt)
-            hub.kill(pkt.wait_thread)
-            pkt.wait_thread.wait()
+            try:
+                self.remove(pkt)
+                hub.kill(pkt.wait_thread)
+                pkt.wait_thread.wait()
+            except ValueError:
+                pass
 
     def get_data(self, dst_ip):
         return [pkt for pkt in self if pkt.dst_ip == dst_ip]
@@ -454,6 +500,7 @@ class _SuspendPacket(object):
         super(_SuspendPacket, self).__init__()
         self.in_port = in_port
         self.dst_ip = header_list[IPV4].dst
+        self.src_ip = header_list[IPV4].src
         self.header_list = header_list
         self.data = data
         # Start ARP reply wait timer.

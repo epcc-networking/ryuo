@@ -7,9 +7,9 @@ from ryu.lib.packet import udp
 from ryu.lib.packet import arp
 from ryu.lib.packet import icmp
 
-MAX_SUSPENDPACKETS = 50  # Threshold of the packet suspends thread count.
+MAX_SUSPENDPACKETS = 5000  # Threshold of the packet suspends thread count.
 DEFAULT_TTL = 64
-ARP_REPLY_TIMER = 2  # sec
+ARP_REPLY_TIMER = 5  # sec
 IDLE_TIMEOUT = 1800  # sec
 
 PORTNO_PATTERN = r'[0-9a-f]{1,8}|all'

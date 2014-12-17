@@ -1,8 +1,40 @@
 #!/usr/bin/env python2
+import argparse
+import os
 
 from mininet.cli import CLI
 
-from ryuo.tests.utils import mn_from_gml, mn_from_gml_argparser
+from ryuo.mininet.utils import mn_from_gml
+
+
+def mn_from_gml_argparser():
+    parser = argparse.ArgumentParser(
+        description='Create Mininet topology from gml file.')
+    parser.add_argument('-g', '--gml-file', help='GML topology description',
+                        action='store', required=True)
+    parser.add_argument('-o', '--openflow', help='OpenFlow version',
+                        action='store', default='OpenFlow13')
+    parser.add_argument('-l', '--local-apps', help='local ryu apps to run',
+                        action='store', nargs='+')
+    parser.add_argument('-d', '--local-app-dir', help='Location of local apps',
+                        action='store', default=os.getcwd())
+    parser.add_argument('-a', '--assign-ip', action='store_true',
+                        help="assign IPs to switch ports")
+    parser.add_argument('-e', '--end-hosts', action='store_true',
+                        help='attach host to each switch')
+    parser.add_argument('-n', '--normal', action='store_true',
+                        help="don't use ryuo local controller")
+    parser.add_argument('-c', '--ryuo-ip', action='store', default='127.0.0.1',
+                        help='IP address of Ryuo controller')
+    parser.add_argument('-r', '--request-routing', action='store_true',
+                        default=False, help='request routing after assign ips')
+    parser.add_argument('-q', '--no-cli', help='no mininet cli',
+                        default=False, action='store_true')
+    parser.add_argument('-p', '--ping-all', help='mininet ping all',
+                        action='store_true', default=False)
+    parser.add_argument('-w', '--wait-for-mininet', type=int, default=20,
+                        help='seconds to wait mininet')
+    return parser
 
 
 if __name__ == '__main__':

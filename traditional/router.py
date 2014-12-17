@@ -148,7 +148,7 @@ class Router():
         # Send ICMP host unreach error.
         src_ip = self._get_send_port_ip(packet_buffer.header_list)
         if src_ip is not None:
-            self.ofctl.send_icmp(packet_buffer.in_port,
+            self.ofctl.reply_icmp(packet_buffer.in_port,
                                  packet_buffer.header_list,
                                  icmp.ICMP_DEST_UNREACH,
                                  icmp.ICMP_HOST_UNREACH_CODE,
@@ -266,7 +266,7 @@ class Router():
             self._logger.info('Invalid packet from my self.')
             return
         if src_ip is not None:
-            self.ofctl.send_icmp(in_port, headers, ICMP_TIME_EXCEEDED,
+            self.ofctl.reply_icmp(in_port, headers, ICMP_TIME_EXCEEDED,
                                  ICMP_TTL_EXPIRED_CODE,
                                  msg_data=msg.data, src_ip=src_ip)
             self._logger.info('Send ICMP time exceeded to %s from %s', srcip,
@@ -303,13 +303,13 @@ class Router():
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
         in_port = self.ofctl.get_packet_in_inport(msg)
-        self.ofctl.send_icmp(in_port, headers, ICMP_ECHO_REPLY,
+        self.ofctl.reply_icmp(in_port, headers, ICMP_ECHO_REPLY,
                              ICMP_ECHO_REPLY_CODE,
                              icmp_data=headers[ICMP].data)
 
     def _packet_in_tcp_udp(self, msg, headers):
         in_port = self.ofctl.get_packet_in_inport(msg)
-        self.ofctl.send_icmp(in_port, headers, ICMP_DEST_UNREACH,
+        self.ofctl.reply_icmp(in_port, headers, ICMP_DEST_UNREACH,
                              ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
 
     def _learning_host_mac(self, msg, header_list):

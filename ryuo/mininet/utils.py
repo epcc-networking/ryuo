@@ -1,3 +1,15 @@
+import subprocess
+import time
+
+from mininet.link import TCLink
+from mininet.net import Mininet
+from mininet.node import OVSSwitch, RemoteController
+
+from ryuo.mininet.node import RyuoOVSSwitch, TestingHost
+from ryuo.mininet.topology import RyuoTopoFromTopoZoo
+from ryuo.tests.utils import add_addresses, request_routing
+
+
 def assign_ip_to_switches(begin_net, net, ips=None):
     """
     Assign ip to each switch ports, in form '10.0.%d.[1,2]/24' % network_num
@@ -43,3 +55,43 @@ def attach_host_to_switches(begin_net, net, ips=None):
         host.setDefaultRoute('via 10.%d.%d.1' % (n1, n2))
         begin_net += 1
     return begin_net, ips
+
+
+def mn_from_gml(normal, assign_ip, end_hosts, routing, ryuo_ip, mn_wait,
+                gml_file, openflow, local_app_dir, local_apps, ping_all):
+    RyuoOVSSwitch.setup()
+    subprocess.call(['mn', '-c'])
+    if normal:
+        net = Mininet(topo=RyuoTopoFromTopoZoo(gml_file,
+                                               openflow,
+                                               local_app_dir),
+                      switch=OVSSwitch,
+                      controller=RemoteController,
+                      host=TestingHost,
+                      link=TCLink)
+    else:
+        net = Mininet(topo=RyuoTopoFromTopoZoo(gml_file,
+                                               openflow,
+                                               local_app_dir,
+                                               ' '.join(local_apps)),
+                      switch=RyuoOVSSwitch,
+                      controller=RemoteController,
+                      host=TestingHost,
+                      link=TCLink)
+    net_num = 1
+    ips = []
+    if assign_ip:
+        net_num, ips = assign_ip_to_switches(net_num, net, ips)
+    if assign_ip and end_hosts:
+        net_num, ips = attach_host_to_switches(net_num, net, ips)
+    net.start()
+    time.sleep(mn_wait)
+    add_addresses(ips, ryuo_ip)
+    if routing:
+        request_routing(ryuo_ip)
+        time.sleep(5)
+    if ping_all:
+        net.pingAll()
+    return net
+
+
