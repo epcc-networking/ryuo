@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
-import subprocess
 import time
 
+from mininet.cli import CLI
 from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import RemoteController
@@ -89,27 +89,27 @@ if __name__ == '__main__':
     # h2.stop_tshark()
     # h1.stop_pktgen()
     # ARP handling will cause high packet loss on the first second
-    net.pingAll()
-    time.sleep(2)
-    iperf_server = h2.popen(['iperf', '-s', '-u',
-                             '-w', '2m',
-                             '-l', '12',
-                             '-i', '1',
-                             '>', 'h2.txt'], shell=True)
-    time.sleep(1)
-    iperf_client = h1.popen(['iperf',
-                             '-c', '10.0.5.2',
-                             '-w', '2m',
-                             '-b', '10m',
-                             '-l', '12',
-                             '-t', '15',
-                             '>', 'h1.txt'], shell=True)
-    time.sleep(2)
-    subprocess.call(['ifconfig', 's1-eth3', 'down'])
-    time.sleep(2)
-    subprocess.call(['ifconfig', 's1-eth3', 'up'])
-    iperf_client.wait()
-    time.sleep(5)
-    iperf_server.kill()
-    # CLI(net)
+    # net.pingAll()
+    # time.sleep(2)
+    # iperf_server = h2.popen(['iperf', '-s', '-u',
+    # '-w', '2m',
+    #                          '-l', '12',
+    #                          '-i', '1',
+    #                          '>', 'h2.txt'], shell=True)
+    # time.sleep(1)
+    # iperf_client = h1.popen(['iperf',
+    #                          '-c', '10.0.5.2',
+    #                          '-w', '2m',
+    #                          '-b', '10m',
+    #                          '-l', '12',
+    #                          '-t', '15',
+    #                          '>', 'h1.txt'], shell=True)
+    # time.sleep(2)
+    # subprocess.call(['ifconfig', 's1-eth3', 'down'])
+    # time.sleep(2)
+    # subprocess.call(['ifconfig', 's1-eth3', 'up'])
+    # iperf_client.wait()
+    # time.sleep(5)
+    # iperf_server.kill()
+    CLI(net)
     net.stop()

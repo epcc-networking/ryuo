@@ -5,20 +5,21 @@ from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls
 from ryu.lib.packet import packet
 from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
 from ryu.lib.packet.icmp import ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
-    ICMP_PORT_UNREACH_CODE, ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED, \
+    ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED, \
     ICMP_TTL_EXPIRED_CODE, ICMP_ECHO_REQUEST, ICMP_HOST_UNREACH_CODE
 from ryu.ofproto import ether
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
 
 from ryuo.kf_routing.app import KFRoutingApp
+from ryuo.kf_routing.switch_control import OVSSwitchControl
 from ryuo.topology.event import EventPortDelete, EventPortAdd, \
     EventPortModify, EventLinkAdd
 from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
-    MAX_SUSPENDPACKETS, PRIORITY_MAC_LEARNING, PRIORITY_L2_SWITCHING, \
+    MAX_SUSPENDPACKETS, PRIORITY_L2_SWITCHING, \
     PORT_UP, ARP
 from ryuo.local.local_controller import LocalController
 from ryuo.config import ARP_EXPIRE_SECOND
@@ -37,6 +38,7 @@ class KFRoutingLocal(LocalController):
         self.packet_buffer = _SuspendPacketList(
             self.send_icmp_unreachable_error)
         self.pending_arps = _PendingArps(self)
+        self.switch_ctl = OVSSwitchControl()
 
     @expose
     def add_route(self, dst_ip, group_id):
@@ -75,10 +77,6 @@ class KFRoutingLocal(LocalController):
         self.ports[port_no].set_ip(nw, mask, ip)
         self._logger.info('Setting IP %s/%d of %s', ip, mask, nw)
 
-        priority, dummy = _get_priority(PRIORITY_MAC_LEARNING)
-        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
-                                      dst_ip=nw, dst_mask=mask)
-        self._logger.info('Set MAC learning for %s', ip)
         # IP handling
         priority, dummy = _get_priority(PRIORITY_IP_HANDLING)
         self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
@@ -142,7 +140,8 @@ class KFRoutingLocal(LocalController):
 
     @set_ev_cls(EventPortAdd)
     def _on_port_added(self, ev):
-        self.ports[ev.port.port_no] = _Port(ev.port.port_no, ev.port.hw_addr)
+        self.ports[ev.port.port_no] = _Port(ev.port.port_no, ev.port.hw_addr,
+                                            ev.port.name)
 
     @set_ev_cls(EventPortModify)
     def _on_port_modified(self, ev):
@@ -192,7 +191,8 @@ class KFRoutingLocal(LocalController):
         super(KFRoutingLocal, self)._switch_enter(dp)
         for ofpport in dp.ports.values():
             self.ports[ofpport.port_no] = _Port(ofpport.port_no,
-                                                ofpport.hw_addr)
+                                                ofpport.hw_addr,
+                                                ofpport.name)
         self.groups = _GroupTable(self.ofctl, self.ports)
         self.routing_table = _RoutingTable(self._logger)
         self.arp_table = _ArpTable(self._logger)
@@ -209,10 +209,10 @@ class KFRoutingLocal(LocalController):
         src_port = self.ports.get_by_ip(headers[ARP].src_ip)
         if src_port is None:
             return
-        if self.arp_table.get(headers[ARP].src_ip) is None:
+        src_ip = headers[ARP].src_ip
+        if src_ip not in [port.ip for port in self.ports.values()]:
             self._learn_host_mac(msg, headers)
         in_port = self.ofctl.get_packet_in_inport(msg)
-        src_ip = headers[ARP].src_ip
         dst_ip = headers[ARP].dst_ip
         self._logger.info('Receive ARP from %s to %s', src_ip, dst_ip)
         if headers[ARP].opcode == ARP_REQUEST:
@@ -246,6 +246,7 @@ class KFRoutingLocal(LocalController):
         src_mac = headers[ARP].src_mac
         dst_mac = self.ports[out_port].mac
         src_ip = headers[ARP].src_ip
+
         self.arp_table.add_entry(src_ip, src_mac)
         priority, dummy = _get_priority(PRIORITY_IMPLICIT_ROUTING)
         self.ofctl.set_routing_flow(0,
@@ -290,14 +291,16 @@ class KFRoutingLocal(LocalController):
                               icmp_data=headers[ICMP].data)
 
     def _packet_in_tcp_udp(self, msg, headers):
-        in_port = self.ofctl.get_packet_in_inport(msg)
-        self.ofctl.reply_icmp(in_port,
-                              headers,
-                              ICMP_DEST_UNREACH,
-                              ICMP_PORT_UNREACH_CODE,
-                              msg_data=msg.data)
-        self._logger.info('Receive TCP/UDP from %s, sending icmp unreachable',
-                          headers[IPV4].src)
+        # Ignore all tcp/udp packets
+        pass
+        # in_port = self.ofctl.get_packet_in_inport(msg)
+        #self.ofctl.reply_icmp(in_port,
+        #                      headers,
+        #                      ICMP_DEST_UNREACH,
+        #                      ICMP_PORT_UNREACH_CODE,
+        #                      msg_data=msg.data)
+        #self._logger.info('Receive TCP/UDP from %s, sending icmp unreachable',
+        #                  headers[IPV4].src)
 
     def _packet_in_to_node(self, msg, headers):
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
@@ -640,9 +643,10 @@ class _Port(object):
     _PORT_UP = 1
     _PORT_DOWN = 0
 
-    def __init__(self, port_no, mac):
+    def __init__(self, port_no, mac, name):
         super(_Port, self).__init__()
         self.port_no = port_no
+        self.name = name
         self.ip = None
         self.nw = None
         self.netmask = None
