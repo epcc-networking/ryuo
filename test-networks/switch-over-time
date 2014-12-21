@@ -2,7 +2,6 @@
 import subprocess
 import time
 
-from mininet.cli import CLI
 from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import RemoteController
@@ -79,11 +78,13 @@ if __name__ == '__main__':
 
     # ARP handling will cause high packet loss on the first second
     net.pingAll()
+
+    # CLI(net)
     h1.enable_pktgen()
     s1 = net.switches[0]
     h1.setup_pktgen(0, 64, '10.0.5.2', s1.MAC(s1.intfs[1]), delay=50000)
 
-    h2.start_tshark()
+    h2.start_tshark('zsy')
     h1.start_pktgen()
     time.sleep(2)
     subprocess.call(['ifconfig', 's2-eth2', 'down'])
@@ -113,5 +114,4 @@ if __name__ == '__main__':
     # iperf_client.wait()
     # time.sleep(5)
     # iperf_server.kill()
-    CLI(net)
     net.stop()

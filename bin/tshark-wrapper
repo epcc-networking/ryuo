@@ -1,0 +1,25 @@
+#!/usr/bin/env python2
+
+import argparse
+import subprocess
+
+from ryuo.tests.utils import as_normal_user
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Run tshark with specific user and group')
+    parser.add_argument('-u', '--user', help='user to run tshark',
+                        required=True)
+    parser.add_argument('-g', '--group', help='group to run tshark',
+                        default='wireshark')
+    parser.add_argument('-a', '--tshark-arguments',
+                        help='arguments pass to tshark')
+    args = parser.parse_args()
+    commands = args.tshark_arguments.split(' ')
+    commands.insert(0, 'tshark')
+
+    tshark = subprocess.Popen(commands,
+                              preexec_fn=lambda: as_normal_user(args.user,
+                                                                args.group))
+    tshark.wait()

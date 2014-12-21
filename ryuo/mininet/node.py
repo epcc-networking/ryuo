@@ -156,12 +156,12 @@ class TestingHost(Host):
         self.pktgen_popen.kill()
         self.pgset('stop', self._PG_CTRL)
 
-    def start_tshark(self):
+    def start_tshark(self, user, group='wireshark'):
         with open(os.devnull, 'w') as f:
-            self.tshark_popen = self.popen(['tshark',
-                                            '-i', self.defaultIntf().name,
-                                            '-w', '%s.pcap' % self.name],
-                                           stderr=f)
+            command = ['bin/tshark-wrapper', '-u', user, '-g', group,
+                       '-a', '-i %s -w %s-pktgen.pcap' % (
+                    self.defaultIntf().name, self.name)]
+            self.tshark_popen = self.popen(command)
 
     def stop_tshark(self):
         self.tshark_popen.kill()
