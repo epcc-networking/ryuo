@@ -97,7 +97,7 @@ class TestingHost(Host):
         self.cmd(['modprobe', 'pktgen'])
 
     def pgset(self, value, pgdev, wait=True):
-        command = ['echo', '"%s"' % value, '>', pgdev]
+        command = ['bash', '-c', '\'echo "%s" > %s\'' % (value, pgdev)]
         info(' '.join(command) + '\n')
         pgsetter = self.popen(command, shell=True)
         if not wait:
@@ -106,13 +106,13 @@ class TestingHost(Host):
         if len(stderr) > 0:
             raise RuntimeError(stderr)
         pgsetter.wait()
-        with open(pgdev, 'r') as f:
-            result = f.read()
-            if 'Result: OK' in result:
-                return
-            for line in result.split('\n'):
-                if 'Result:' in line:
-                    raise RuntimeError(line)
+        result_reader = self.popen('cat', pgdev)
+        result, dummy = result_reader.communicate()
+        if 'Result: OK' in result:
+            return
+        for line in result.split('\n'):
+            if 'Result:' in line:
+                raise RuntimeError(line)
 
     def setup_pktgen(self, thread, pkt_size, dst, dst_mac, udp_port=7000,
                      src_mac=None, delay=0, clone_skb=0, device=None, count=0):

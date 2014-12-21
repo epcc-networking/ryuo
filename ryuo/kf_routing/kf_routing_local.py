@@ -20,7 +20,7 @@ from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_L2_SWITCHING, \
-    PORT_UP, ARP
+    PORT_UP, ARP, PRIORITY_MAC_LEARNING
 from ryuo.local.local_controller import LocalController
 from ryuo.config import ARP_EXPIRE_SECOND
 from ryuo.utils import nw_addr_aton, ipv4_apply_mask, expose
@@ -68,13 +68,17 @@ class KFRoutingLocal(LocalController):
             nw = ip_data[0]
             mask = ip_data[1]
             ip = ip_data[2]
-            self.set_port_address.lock_free(self, port_no, ip, mask, nw)
+            peer_ip = ip_data[3]
+            self.set_port_address.lock_free(self, port_no, ip, mask, nw,
+                                            peer_ip)
 
     @expose
-    def set_port_address(self, port_no, ip, mask, nw):
+    def set_port_address(self, port_no, ip, mask, nw, peer_ip=None):
         if port_no not in self.ports.keys():
             return None
-        self.ports[port_no].set_ip(nw, mask, ip)
+        port = self.ports[port_no]
+        port.set_ip(nw, mask, ip)
+        port.set_peer_ip(peer_ip)
         self._logger.info('Setting IP %s/%d of %s', ip, mask, nw)
 
         # IP handling
@@ -82,6 +86,11 @@ class KFRoutingLocal(LocalController):
         self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
                                       dst_ip=ip)
         self._logger.info('Set IP handling for %s', ip)
+        # MAC Learning
+        priority, dummy = _get_priority(PRIORITY_MAC_LEARNING)
+        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
+                                      dst_ip=nw, dst_mask=mask)
+        self._logger.info('Set MAC learning for %s', ip)
         # L2 switching
         out_port = self.ofctl.dp.ofproto.OFPP_NORMAL
         priority, dummy = _get_priority(PRIORITY_L2_SWITCHING)
@@ -94,6 +103,9 @@ class KFRoutingLocal(LocalController):
         # Send GARP
         self.send_arp(ip, ip, port=port_no, code=ARP_REQUEST)
         self.send_arp(ip, ip, port=port_no, code=ARP_REPLY)
+        if peer_ip is not None:
+            self.switch_ctl.enable_bfd(port.name, port.peer_mac, ip, peer_ip,
+                                       1, 1)
 
     def send_arp(self, src_ip, dst_ip, in_port=None, port=None,
                  code=ARP_REQUEST):
@@ -255,7 +267,7 @@ class KFRoutingLocal(LocalController):
                                     src_mac=dst_mac,
                                     dst_mac=src_mac,
                                     nw_dst=src_ip,
-                                    idle_timeout=ARP_EXPIRE_SECOND,
+                                    # idle_timeout=ARP_EXPIRE_SECOND,
                                     dec_ttl=True)
         self._logger.info('Set implicit routing flow to %s', src_ip)
 
@@ -284,11 +296,13 @@ class KFRoutingLocal(LocalController):
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
         in_port = self.ofctl.get_packet_in_inport(msg)
+        src_ip = self._get_send_port_ip(headers)
         self.ofctl.reply_icmp(in_port,
                               headers,
                               ICMP_ECHO_REPLY,
                               ICMP_ECHO_REPLY_CODE,
-                              icmp_data=headers[ICMP].data)
+                              icmp_data=headers[ICMP].data,
+                              src_ip=src_ip)
 
     def _packet_in_tcp_udp(self, msg, headers):
         # Ignore all tcp/udp packets
@@ -654,6 +668,7 @@ class _Port(object):
         self.peer_mac = None
         self.links = {}
         self.status = self._PORT_UP
+        self.peer_ip = None
 
     def set_ip(self, nw, mask, ip):
         self.nw = nw
@@ -678,6 +693,8 @@ class _Port(object):
     def set_mac(self, mac):
         self.mac = mac
 
+    def set_peer_ip(self, ip):
+        self.peer_ip = ip
 
 class _DisabledFailoverPorts(dict):
     """

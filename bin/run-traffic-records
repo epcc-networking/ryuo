@@ -35,9 +35,6 @@ if __name__ == '__main__':
     gmls = sorted([f for f in listdir(topo_dir) if
                    isfile(join(topo_dir, f)) and f.endswith('.gml')])
     for gml in gmls:
-        ryuo_ns = None
-        if args.controller_type == 'ryuo':
-            ryuo_ns = subprocess.Popen(['ryuo-ns'])
 
         full_path = join(topo_dir, gml)
         graph = read_gml(full_path)
@@ -62,8 +59,6 @@ if __name__ == '__main__':
                          '-o', pcap_file,
                          '-u', args.user])
 
-        if ryuo_ns is not None:
-            ryuo_ns.kill()
 
         total_filter = '!(http or tcp.port<6800)'
         if args.controller_type == 'ryu':

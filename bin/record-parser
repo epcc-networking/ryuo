@@ -7,6 +7,7 @@ from os.path import join
 import json
 
 from matplotlib import pyplot
+from matplotlib.pyplot import legend
 
 
 def is_app(app_name, file_name):
@@ -33,8 +34,9 @@ if __name__ == '__main__':
     edges_tcp = copy.deepcopy(edges_frame)
     nodes_tcp = copy.deepcopy(edges_frame)
 
-    fig = pyplot.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    tcp_fig = pyplot.figure()
+    tcp_ax = tcp_fig.add_subplot(111, projection='3d')
+    handlers = [None for i in range(4)]
 
     for result in results:
         name_parts = result.split('.')[0].split('-')
@@ -86,16 +88,31 @@ if __name__ == '__main__':
                 edges_tcp['ryu-flow-group-mod'][num_edges].append(
                     res['flow_group_mod_tcp'])
 
-                ax.scatter(num_edges, num_nodes, res['total_tcp'], c='r',
-                           marker='o')
-                ax.scatter(num_edges, num_nodes, res['packet_in_out_tcp'],
-                           c='g', marker='^')
-                ax.scatter(num_edges, num_nodes, res['flow_group_mod_tcp'],
-                           c='b', marker='*')
+                handlers[0] = tcp_ax.scatter(num_edges, num_nodes,
+                                             res['total_tcp'], c='r',
+                                             marker='o')
+                # handlers[1] = tcp_ax.scatter(num_edges, num_nodes,
+                #                             res['packet_in_out_tcp'],
+                #                             c='g', marker='^')
+                handlers[2] = tcp_ax.scatter(num_edges, num_nodes,
+                                             res['flow_group_mod_tcp'],
+                                             c='b', marker='*')
+            else:
+                if num_edges not in edges_frame['ryuo-total']:
+                    edges_frame['ryuo-total'][num_edges] = []
+                if num_nodes not in nodes_frame['ryuo-total']:
+                    nodes_frame['ryuo-total'][num_nodes] = []
+                nodes_frame['ryuo-total'][num_nodes].append(res['total_frame'])
+                edges_frame['ryuo-total'][num_edges].append(res['total_tcp'])
+                handlers[3] = tcp_ax.scatter(num_edges, num_nodes,
+                                             res['total_tcp'], c='c',
+                                             marker='v')
 
-    ax.set_xlabel('Num Edges')
-    ax.set_ylabel('Num Nodes')
-    ax.set_zlabel('Total Tcp (byte)')
+    tcp_ax.set_xlabel('Num Edges')
+    tcp_ax.set_ylabel('Num Nodes')
+    tcp_ax.set_zlabel('Tcp Traffic (byte)')
+    legend(handlers, ['Ryu Total TCP', 'Ryu Packet In/Out',
+                      'Ryu Flow/Group Mod', 'Ryuo Total TCP'])
 
     pyplot.show()
 

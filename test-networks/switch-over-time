@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+import subprocess
 import time
 
 from mininet.cli import CLI
@@ -75,25 +76,26 @@ if __name__ == '__main__':
     h2.setIP('10.0.5.2/24')
     h1.setDefaultRoute('via 10.0.1.1')
     h2.setDefaultRoute('via 10.0.5.1')
-    # h1.enable_pktgen()
-    # s1 = net.switches[0]
-    # h1.setup_pktgen(0, 64, '10.0.5.2', s1.defaultIntf().mac, delay=50000)
-    #
-    # h2.start_tshark()
-    # h1.start_pktgen()
-    # time.sleep(1)
-    # subprocess.call(['ifconfig', 's2-eth2', 'down'])
-    # time.sleep(1)
-    # subprocess.call(['ifconfig', 's2-eth2', 'up'])
-    # time.sleep(1)
-    # h2.stop_tshark()
-    # h1.stop_pktgen()
+
     # ARP handling will cause high packet loss on the first second
-    # net.pingAll()
+    net.pingAll()
+    h1.enable_pktgen()
+    s1 = net.switches[0]
+    h1.setup_pktgen(0, 64, '10.0.5.2', s1.MAC(s1.intfs[1]), delay=50000)
+
+    h2.start_tshark()
+    h1.start_pktgen()
+    time.sleep(2)
+    subprocess.call(['ifconfig', 's2-eth2', 'down'])
+    time.sleep(2)
+    subprocess.call(['ifconfig', 's2-eth2', 'up'])
+    time.sleep(2)
+    h2.stop_tshark()
+    h1.stop_pktgen()
     # time.sleep(2)
     # iperf_server = h2.popen(['iperf', '-s', '-u',
     # '-w', '2m',
-    #                          '-l', '12',
+    # '-l', '20',
     #                          '-i', '1',
     #                          '>', 'h2.txt'], shell=True)
     # time.sleep(1)
@@ -101,13 +103,13 @@ if __name__ == '__main__':
     #                          '-c', '10.0.5.2',
     #                          '-w', '2m',
     #                          '-b', '10m',
-    #                          '-l', '12',
+    #                          '-l', '20',
     #                          '-t', '15',
     #                          '>', 'h1.txt'], shell=True)
     # time.sleep(2)
-    # subprocess.call(['ifconfig', 's1-eth3', 'down'])
+    # subprocess.call(['ifconfig', 's2-eth2', 'down'])
     # time.sleep(2)
-    # subprocess.call(['ifconfig', 's1-eth3', 'up'])
+    # subprocess.call(['ifconfig', 's2-eth2', 'up'])
     # iperf_client.wait()
     # time.sleep(5)
     # iperf_server.kill()

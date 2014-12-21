@@ -47,6 +47,10 @@ class KFRoutingApp(Ryuo):
         self.address_cache[router_id][port_no] = address
 
     def flush_address_cache(self):
+        links = self.get_all_links()
+        peers = {}
+        for link in links:
+            peers['%d.%d' % (link.src.dpid, link.src.port_no)] = link.dst
         for router_id in self.address_cache:
             ips = {}
             for port_no in self.address_cache[router_id]:
@@ -54,7 +58,14 @@ class KFRoutingApp(Ryuo):
                     self.address_cache[router_id][port_no],
                     router_id,
                     port_no)
-                ips[port_no] = [nw, mask, ip]
+                peer_ip = None
+                try:
+                    peer = peers['%d.%d' % (router_id, port_no)]
+                    peer_ip = self.address_cache[peer.dpid][peer.port_no]
+                    dummy, dummy, peer_ip = nw_addr_aton(peer_ip)
+                except KeyError:
+                    pass
+                ips[port_no] = [nw, mask, ip, peer_ip]
             self.local_apps[router_id].batch_set_port_address(ips)
             for port_no in ips:
                 self.send_event_to_observers(EventAddressAdd(Address(
