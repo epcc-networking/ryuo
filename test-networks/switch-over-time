@@ -85,6 +85,7 @@ if __name__ == '__main__':
     h1.setup_pktgen(0, 64, '10.0.5.2', s1.MAC(s1.intfs[1]), delay=50000)
 
     h2.start_tshark('zsy')
+    time.sleep(1)
     h1.start_pktgen()
     time.sleep(2)
     subprocess.call(['ifconfig', 's2-eth2', 'down'])
