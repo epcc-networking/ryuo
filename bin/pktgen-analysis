@@ -1,0 +1,20 @@
+#!/usr/bin/env python2
+
+import argparse
+import sys
+
+from scapy.utils import rdpcap
+
+from ryuo.tests.utils import get_lost_sequence
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Analysis pktgen packets')
+    parser.add_argument('-f', '--pcap-file', help='pcap file to analysis')
+
+    args = parser.parse_args()
+    print >> sys.stderr, 'Reading packets from % s' % args.pcap_file
+    pkts = rdpcap(args.pcap_file)
+    lost_sequence, max_seq, counter = get_lost_sequence(pkts)
+    print "Packets lost: %s, max seq: %d, pkts: %d, lost: %d" \
+          % (str(lost_sequence), max_seq, counter, len(lost_sequence))

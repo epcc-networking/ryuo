@@ -17,6 +17,7 @@ from ryuo.utils import json_response, error_response, nw_addr_aton, \
 
 APP_CONTEXT_KEY = 'app'
 WSGI_CONTEXT_KEY = 'wsgi'
+ENABLE_BFD = False
 
 
 class KFRoutingApp(Ryuo):
@@ -59,12 +60,13 @@ class KFRoutingApp(Ryuo):
                     router_id,
                     port_no)
                 peer_ip = None
-                try:
-                    peer = peers['%d.%d' % (router_id, port_no)]
-                    peer_ip = self.address_cache[peer.dpid][peer.port_no]
-                    dummy, dummy, peer_ip = nw_addr_aton(peer_ip)
-                except KeyError:
-                    pass
+                if ENABLE_BFD:
+                    try:
+                        peer = peers['%d.%d' % (router_id, port_no)]
+                        peer_ip = self.address_cache[peer.dpid][peer.port_no]
+                        dummy, dummy, peer_ip = nw_addr_aton(peer_ip)
+                    except KeyError:
+                        pass
                 ips[port_no] = [nw, mask, ip, peer_ip]
             self.local_apps[router_id].batch_set_port_address(ips)
             for port_no in ips:

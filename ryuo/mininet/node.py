@@ -159,7 +159,7 @@ class TestingHost(Host):
     def start_tshark(self, user, group='wireshark'):
         with open(os.devnull, 'w') as f:
             command = ['bin/tshark-wrapper', '-u', user, '-g', group,
-                       '-a', '-i %s -w %s-pktgen.pcap' % (
+                       '-a', '-i %s -w %s-pktgen.pcapng' % (
                     self.defaultIntf().name, self.name)]
             self.tshark_popen = self.popen(command)
 

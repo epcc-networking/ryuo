@@ -7,6 +7,8 @@ import subprocess
 from ryu.lib.dpid import dpid_to_str
 from ryu.lib.port_no import port_no_to_str
 
+from ryuo.scapy.layers import Pktgen
+
 
 def name_to_dpid(name):
     nums = re.findall(r'\d+', name)
@@ -51,4 +53,23 @@ def run_tshark_stats(pcap_file, stat, field, user):
          '-qz', 'io,stat,0,%s&&%s' % (stat, field)],
         stdout=subprocess.PIPE,
         preexec_fn=lambda: as_normal_user(user, 'wireshark'))
+
+
+def get_lost_sequence(pkts):
+    max_seq = 0
+    losted_seq = []
+    counter = 0
+    for pkt in pkts:
+        if Pktgen not in pkt:
+            continue
+        counter += 1
+        pkt = pkt[Pktgen]
+        if pkt.seq > max_seq:
+            losted_seq += [i for i in range(max_seq + 1, pkt.seq)]
+            max_seq = pkt.seq
+        elif pkt.seq < max_seq:
+            if pkt.seq in losted_seq:
+                losted_seq.remove(pkt.seq)
+    return losted_seq, max_seq, counter
+
 

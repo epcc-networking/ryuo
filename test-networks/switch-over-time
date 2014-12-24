@@ -1,7 +1,9 @@
 #!/usr/bin/env python2
 import subprocess
 import time
+import sys
 
+from mininet.cli import CLI
 from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import RemoteController
@@ -51,68 +53,78 @@ class SwitchOverTimeTestingTopo(Topo):
 
 
 if __name__ == '__main__':
-    RyuoOVSSwitch.setup()
-    setLogLevel('debug')
-    net = Mininet(topo=SwitchOverTimeTestingTopo(),
-                  switch=RyuoOVSSwitch,
-                  controller=RemoteController,
-                  host=TestingHost)
-    net.start()
-    time.sleep(5)
-    addresses = [['10.0.1.1/24', 1, 1],
-                 ['10.0.2.1/24', 1, 2],
-                 ['10.0.3.1/24', 1, 3],
-                 ['10.0.2.2/24', 2, 2],
-                 ['10.0.4.1/24', 2, 3],
-                 ['10.0.5.1/24', 2, 1],
-                 ['10.0.3.2/24', 3, 1],
-                 ['10.0.4.2/24', 3, 2]]
-    add_addresses(addresses, '127.0.0.1')
-    request_routing('127.0.0.1')
-    h1 = net.hosts[0]
-    h2 = net.hosts[1]
-    h1.setIP('10.0.1.2/24')
-    h2.setIP('10.0.5.2/24')
-    h1.setDefaultRoute('via 10.0.1.1')
-    h2.setDefaultRoute('via 10.0.5.1')
+    for i in range(int(sys.argv[1])):
+        ryuo = subprocess.Popen(['ryu-manager', 'ryuo.kf_routing.app'])
+        time.sleep(4)
+        RyuoOVSSwitch.setup()
+        setLogLevel('debug')
+        net = Mininet(topo=SwitchOverTimeTestingTopo(),
+                      switch=RyuoOVSSwitch,
+                      controller=RemoteController,
+                      host=TestingHost)
+        net.start()
+        time.sleep(5)
+        addresses = [['10.0.1.1/24', 1, 1],
+                     ['10.0.2.1/24', 1, 2],
+                     ['10.0.3.1/24', 1, 3],
+                     ['10.0.2.2/24', 2, 2],
+                     ['10.0.4.1/24', 2, 3],
+                     ['10.0.5.1/24', 2, 1],
+                     ['10.0.3.2/24', 3, 1],
+                     ['10.0.4.2/24', 3, 2]]
+        add_addresses(addresses, '127.0.0.1')
+        request_routing('127.0.0.1')
+        h1 = net.hosts[0]
+        h2 = net.hosts[1]
+        h1.setIP('10.0.1.2/24')
+        h2.setIP('10.0.5.2/24')
+        h1.setDefaultRoute('via 10.0.1.1')
+        h2.setDefaultRoute('via 10.0.5.1')
 
-    # ARP handling will cause high packet loss on the first second
-    net.pingAll()
+        # ARP handling will cause high packet loss on the first second
+        net.pingAll()
 
-    # CLI(net)
-    h1.enable_pktgen()
-    s1 = net.switches[0]
-    h1.setup_pktgen(0, 64, '10.0.5.2', s1.MAC(s1.intfs[1]), delay=50000)
+        CLI(net)
+        h1.enable_pktgen()
+        s1 = net.switches[0]
+        h1.setup_pktgen(0, 64, '10.0.5.2', s1.MAC(s1.intfs[1]), delay=50000)
 
-    h2.start_tshark('zsy')
-    time.sleep(1)
-    h1.start_pktgen()
-    time.sleep(2)
-    subprocess.call(['ifconfig', 's2-eth2', 'down'])
-    time.sleep(2)
-    subprocess.call(['ifconfig', 's2-eth2', 'up'])
-    time.sleep(2)
-    h2.stop_tshark()
-    h1.stop_pktgen()
-    # time.sleep(2)
-    # iperf_server = h2.popen(['iperf', '-s', '-u',
-    # '-w', '2m',
-    # '-l', '20',
-    #                          '-i', '1',
-    #                          '>', 'h2.txt'], shell=True)
-    # time.sleep(1)
-    # iperf_client = h1.popen(['iperf',
-    #                          '-c', '10.0.5.2',
-    #                          '-w', '2m',
-    #                          '-b', '10m',
-    #                          '-l', '20',
-    #                          '-t', '15',
-    #                          '>', 'h1.txt'], shell=True)
-    # time.sleep(2)
-    # subprocess.call(['ifconfig', 's2-eth2', 'down'])
-    # time.sleep(2)
-    # subprocess.call(['ifconfig', 's2-eth2', 'up'])
-    # iperf_client.wait()
-    # time.sleep(5)
-    # iperf_server.kill()
-    net.stop()
+        h2.start_tshark('zsy')
+        time.sleep(2)
+        h1.start_pktgen()
+        time.sleep(2)
+        subprocess.call(['ifconfig', 's2-eth2', 'down'])
+        time.sleep(3)
+        subprocess.call(['ifconfig', 's2-eth2', 'up'])
+        time.sleep(3)
+        h2.stop_tshark()
+        h1.stop_pktgen()
+        ryuo.kill()
+        time.sleep(5)
+        subprocess.call(['tcpdump', '-r', 'h2-pktgen.pcapng',
+                         '-w', 'h2-pktgen-%d.pcap' % i])
+        subprocess.call(
+            ['bash -c "bin/pktgen-analysis -f h2-pktgen-%d.pcap > '
+             'result-%d.txt"' % (i, i)],
+            shell=True)
+        net.stop()
+        # iperf_server = h2.popen(['iperf', '-s', '-u',
+        # '-w', '2m',
+        # '-l', '20',
+        # '-i', '1',
+        # '>', 'h2.txt'], shell=True)
+        # time.sleep(1)
+        # iperf_client = h1.popen(['iperf',
+        # '-c', '10.0.5.2',
+        #                          '-w', '2m',
+        #                          '-b', '10m',
+        #                          '-l', '20',
+        #                          '-t', '15',
+        #                          '>', 'h1.txt'], shell=True)
+        # time.sleep(2)
+        # subprocess.call(['ifconfig', 's2-eth2', 'down'])
+        # time.sleep(2)
+        # subprocess.call(['ifconfig', 's2-eth2', 'up'])
+        # iperf_client.wait()
+        # time.sleep(5)
+        # iperf_server.kill()
