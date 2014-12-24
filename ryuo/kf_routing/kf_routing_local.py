@@ -296,7 +296,7 @@ class KFRoutingLocal(LocalController):
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
         in_port = self.ofctl.get_packet_in_inport(msg)
-        src_ip = self._get_send_port_ip(headers)
+        src_ip = self.ports[in_port].ip
         self.ofctl.reply_icmp(in_port,
                               headers,
                               ICMP_ECHO_REPLY,
