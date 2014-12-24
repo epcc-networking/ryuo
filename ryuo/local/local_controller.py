@@ -78,7 +78,7 @@ class LocalController(app_manager.RyuApp):
         if dpid is None:
             dpid = '?'
         self._logger = logging.getLogger(
-            self.__class__.__name__ + ' ' + str(dpid))
+            self.__class__.__name__ + ' ' + hex(dpid))
         config_logger(self._logger)
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
