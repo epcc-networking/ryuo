@@ -95,5 +95,5 @@ class LocalController(app_manager.RyuApp):
                 [HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER, MAIN_DISPATCHER])
     def error_msg_handler(self, ev):
         msg = ev.msg
-        self._logger.error('OFPErrorMsg: type=0x%02x code=0x%02x message=%s',
-                           msg.type, msg.code, msg.data)
+        self._logger.error('OFPErrorMsg: type=0x%02x code=0x%02x',
+                           msg.type, msg.code)

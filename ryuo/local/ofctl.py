@@ -146,7 +146,8 @@ class OfCtl(object):
                     ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
                     ofp_parser.OFPActionOutput(port)]
                    for i, port in enumerate(out_ports)]
-        buckets = [ofp_parser.OFPBucket(0, port, 0, actions[i]) for
+        buckets = [ofp_parser.OFPBucket(0, port, self.dp.ofproto.OFPG_ANY,
+                                        actions[i]) for
                    i, port in enumerate(watch_ports)]
         req = ofp_parser.OFPGroupMod(self.dp,
                                      command,
