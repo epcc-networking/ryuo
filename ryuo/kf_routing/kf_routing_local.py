@@ -130,7 +130,6 @@ class KFRoutingLocal(LocalController):
         headers = dict((p.protocol_name, p)
                        for p in pkt.protocols if type(p) != str)
         ofproto = self.dp.ofproto
-        self._logger.debug('Packet in.')
         if msg.reason == ofproto.OFPR_INVALID_TTL:
             return self._packet_in_invalid_ttl(msg, headers)
         if ARP in headers:
@@ -322,6 +321,7 @@ class KFRoutingLocal(LocalController):
             return
         in_port = self.ofctl.get_packet_in_inport(msg)
         dst_ip = headers[IPV4].dst
+        self._logger.debug('Packet in to node %s', dst_ip)
         port = self.ports.get_by_ip(dst_ip)
         if port is not None:
             out_ip = port.ip
