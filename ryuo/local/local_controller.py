@@ -2,7 +2,6 @@ import logging
 from multiprocessing import Lock
 
 import Pyro4
-from ryu import utils
 from ryu.base import app_manager
 from ryu.controller import dpset, ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER, \
@@ -97,4 +96,4 @@ class LocalController(app_manager.RyuApp):
     def error_msg_handler(self, ev):
         msg = ev.msg
         self._logger.error('OFPErrorMsg: type=0x%02x code=0x%02x message=%s',
-                           msg.type, msg.code, utils.hex_array(msg.data))
+                           msg.type, msg.code, msg.data)
