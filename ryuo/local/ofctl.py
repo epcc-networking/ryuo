@@ -248,5 +248,6 @@ class OfCtl(object):
 
         # Send packet out
         self.send_packet_out(in_port, output, pkt.data, data_str=str(pkt))
+        self.logger.debug('Sending ARP from %s to %s', src_ip, dst_ip)
 
 
