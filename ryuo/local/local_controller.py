@@ -2,9 +2,11 @@ import logging
 from multiprocessing import Lock
 
 import Pyro4
+from ryu import utils
 from ryu.base import app_manager
-from ryu.controller import dpset
-from ryu.controller.handler import set_ev_cls
+from ryu.controller import dpset, ofp_event
+from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER, \
+    CONFIG_DISPATCHER, HANDSHAKE_DISPATCHER
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
 
@@ -89,3 +91,10 @@ class LocalController(app_manager.RyuApp):
             self._switch_enter(ev.dp)
         else:
             self._switch_leave()
+
+    @set_ev_cls(ofp_event.EventOFPErrorMsg,
+                [HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER, MAIN_DISPATCHER])
+    def error_msg_handler(self, ev):
+        msg = ev.msg
+        self._logger.error('OFPErrorMsg: type=0x%02x code=0x%02x message=%s',
+                           msg.type, msg.code, utils.hex_array(msg.data))
