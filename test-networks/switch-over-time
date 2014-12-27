@@ -13,7 +13,7 @@ from ryuo.mininet.node import TestingHost, RyuoOVSSwitch
 from ryuo.tests.utils import add_addresses, request_routing
 
 
-OFP = 'OpenFlow13'
+OFP = 'OpenFlow14'  #
 
 
 class SwitchOverTimeTestingTopo(Topo):
@@ -35,7 +35,8 @@ class SwitchOverTimeTestingTopo(Topo):
         s = [self.addSwitch('s%d' % (i + 1),
                             controller_dir='.',
                             ryu_args=['ryuo.kf_routing.kf_routing_local',
-                                      'ryuo.topology.topology_local'],
+                                      'ryuo.topology.topology_local',
+                                      '--verbose'],
                             port=6634 + i,
                             protocols=OFP) for i in range(0, 3)]
 
@@ -63,7 +64,7 @@ if __name__ == '__main__':
                       controller=RemoteController,
                       host=TestingHost)
         net.start()
-        time.sleep(5)
+        time.sleep(10)
         addresses = [['10.0.1.1/24', 1, 1],
                      ['10.0.2.1/24', 1, 2],
                      ['10.0.3.1/24', 1, 3],
@@ -85,29 +86,30 @@ if __name__ == '__main__':
         net.pingAll()
 
         CLI(net)
-        h1.enable_pktgen()
-        s1 = net.switches[0]
-        h1.setup_pktgen(0, 64, '10.0.5.2', s1.MAC(s1.intfs[1]), delay=50000)
-
-        h2.start_tshark('zsy')
-        time.sleep(2)
-        h1.start_pktgen()
-        time.sleep(2)
-        subprocess.call(['ifconfig', 's2-eth2', 'down'])
-        time.sleep(3)
-        subprocess.call(['ifconfig', 's2-eth2', 'up'])
-        time.sleep(3)
-        h2.stop_tshark()
-        h1.stop_pktgen()
+        # h1.enable_pktgen()
+        # s1 = net.switches[0]
+        # h1.setup_pktgen(0, 64, '10.0.5.2', s1.MAC(s1.intfs[1]), delay=50000)
+        #
+        # h2.start_tshark('zsy')
+        # time.sleep(2)
+        # h1.start_pktgen()
+        # time.sleep(2)
+        # subprocess.call(['ifconfig', 's2-eth2', 'down'])
+        # time.sleep(3)
+        # subprocess.call(['ifconfig', 's2-eth2', 'up'])
+        # time.sleep(3)
+        # h2.stop_tshark()
+        # h1.stop_pktgen()
         ryuo.kill()
-        time.sleep(5)
-        subprocess.call(['tcpdump', '-r', 'h2-pktgen.pcapng',
-                         '-w', 'h2-pktgen-%d.pcap' % i])
-        subprocess.call(
-            ['bash -c "bin/pktgen-analysis -f h2-pktgen-%d.pcap > '
-             'result-%d.txt"' % (i, i)],
-            shell=True)
+        # time.sleep(5)
+        # subprocess.call(['tcpdump', '-r', 'h2-pktgen.pcapng',
+        # '-w', 'h2-pktgen-%d.pcap' % i])
+        # subprocess.call(
+        #     ['bash -c "bin/pktgen-analysis -f h2-pktgen-%d.pcap > '
+        #      'result-%d.txt"' % (i, i)],
+        #     shell=True)
         net.stop()
+
         # iperf_server = h2.popen(['iperf', '-s', '-u',
         # '-w', '2m',
         # '-l', '20',

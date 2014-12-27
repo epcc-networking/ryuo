@@ -128,6 +128,7 @@ class TopologyLocal(LocalController):
                 self._port_added(port)
                 self._report_port_added(port)
                 self.lldp_event.set()
+                self.lldp_event.set()
         elif reason == ofp.OFPPR_DELETE:
             self._logger.info('Port %d deleted.', ofpport.port_no)
             port = self._get_port(ofpport.port_no)
@@ -139,6 +140,7 @@ class TopologyLocal(LocalController):
         else:
             self._logger.info('Port %d modified.', ofpport.port_no)
             port = self._get_port(ofpport.port_no)
+            port.lldp_reply = False
             if port and not port.is_reserved():
                 port.modify(ofpport)
                 self._report_port_modified(port)
@@ -195,7 +197,8 @@ class TopologyLocal(LocalController):
                     ports.append(key)
                     continue
 
-                timeout = expire - now
+                if timeout is None or timeout > expire - now:
+                    timeout = expire - now
                 # break
 
             for port in ports_now:
@@ -225,6 +228,7 @@ class TopologyLocal(LocalController):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
+        self._logger.debug('Packet in')
         msg = ev.msg
         ofp = msg.datapath.ofproto
         pkt = packet.Packet(msg.data)

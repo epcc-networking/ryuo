@@ -382,6 +382,11 @@ class KFRoutingLocal(LocalController):
                 return self.ports[port_no]
         return None
 
+    @set_ev_cls(ofp_event.EventOFPGetAsyncReply, MAIN_DISPATCHER)
+    def ger_async_reply_handler(self, ev):
+        msg = ev.msg
+        self._logger.info('OFPGetAsyncReply: %s', repr(msg.properties))
+
 
 class _ArpEntry(object):
     def __init__(self, ip, mac):

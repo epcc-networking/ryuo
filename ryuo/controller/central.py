@@ -8,6 +8,7 @@ from ryu.controller import dpset
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 
+from ryuo.config import RYUO_HOST
 from ryuo.utils import config_logger, lock_class, expose
 
 
@@ -15,7 +16,7 @@ Pyro4.config.REQUIRE_EXPOSE = True
 Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
 Pyro4.config.THREADPOOL_SIZE = 160
-Pyro4.config.HOST = '192.168.0.1'
+Pyro4.config.HOST = RYUO_HOST
 
 
 @lock_class([], Lock)

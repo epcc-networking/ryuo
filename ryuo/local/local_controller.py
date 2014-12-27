@@ -7,23 +7,23 @@ from ryu.controller import dpset, ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER, \
     CONFIG_DISPATCHER, HANDSHAKE_DISPATCHER
 from ryu.lib import hub
-from ryu.ofproto import ofproto_v1_2, ofproto_v1_3
+from ryu.ofproto import ofproto_v1_3, ofproto_v1_4
 
 from ryuo.utils import config_logger, lock_class
-from ryuo.config import CENTRAL_HOST_NAME
+from ryuo.config import CENTRAL_HOST_NAME, RYU_HOST
 from ryuo.local.ofctl import OfCtl
 
 
 Pyro4.config.REQUIRE_EXPOSE = True
 Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
-Pyro4.config.HOST = '192.168.0.10'
+Pyro4.config.HOST = RYU_HOST
 
 
 @lock_class([], Lock)
 class LocalController(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_2.OFP_VERSION,
-                    ofproto_v1_3.OFP_VERSION]
+    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION,
+                    ofproto_v1_4.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super(LocalController, self).__init__(*args, **kwargs)
@@ -61,7 +61,7 @@ class LocalController(app_manager.RyuApp):
         self._ns._pyroRelease()
         self._setup_logger(dp.id)
         self.dp = dp
-        self.ofctl = OfCtl(dp, self._logger)
+        self.ofctl = OfCtl.factory(dp, self._logger)
         self._logger.info('Switch entered, ready to work')
 
         self.ryuo.ryuo_switch_enter(dp.id, self.uri)

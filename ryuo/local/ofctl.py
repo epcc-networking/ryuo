@@ -1,6 +1,8 @@
+from ryu.exception import OFPUnknownVersion
 from ryu.ofproto import inet
 from ryu.ofproto import ether
 from ryu.lib.packet import packet
+from ryu.ofproto import ofproto_v1_3, ofproto_v1_4
 
 from ryuo.utils import *
 from ryuo.constants import *
@@ -10,10 +12,31 @@ UINT32_MAX = 0xffffffff
 
 
 class OfCtl(object):
+    _OF_VERSIONS = {}
+
     def __init__(self, dp, logger):
         super(OfCtl, self).__init__()
         self.dp = dp
         self.logger = logger
+        self.ofp = dp.ofproto
+        self.ofp_parser = dp.ofproto_parser
+
+    @staticmethod
+    def register_of_version(version):
+        def _register_of_version(cls):
+            OfCtl._OF_VERSIONS.setdefault(version, cls)
+            return cls
+
+        return _register_of_version
+
+    @staticmethod
+    def factory(dp, logger):
+        of_version = dp.ofproto.OFP_VERSION
+        if of_version in OfCtl._OF_VERSIONS:
+            ofctl = OfCtl._OF_VERSIONS[of_version](dp, logger)
+            return ofctl
+        else:
+            raise OFPUnknownVersion(version=of_version)
 
     def send_packet_out(self, in_port, output, data, data_str=None):
         actions = [self.dp.ofproto_parser.OFPActionOutput(output, 0)]
@@ -88,8 +111,7 @@ class OfCtl(object):
 
     def set_flow(self, cookie, priority, dl_type=0, dl_dst=0, dl_vlan=0,
                  nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
-                 nw_proto=0, idle_timeout=0, actions=None, in_port=None,
-                 ip_proto=None):
+                 nw_proto=0, idle_timeout=0, actions=None, in_port=None):
         ofp = self.dp.ofproto
         ofp_parser = self.dp.ofproto_parser
         cmd = ofp.OFPFC_ADD
@@ -104,8 +126,8 @@ class OfCtl(object):
             match.set_vlan_vid(dl_vlan)
         if in_port:
             match.set_in_port(in_port)
-        if ip_proto:
-            match.set_ip_proto(ip_proto)
+        if nw_proto:
+            match.set_ip_proto(nw_proto)
         # TODO: Handle ipv6 address
         if nw_src:
             match.set_ipv4_src_masked(ipv4_text_to_int(nw_src),
@@ -130,13 +152,13 @@ class OfCtl(object):
 
     def set_packet_in_flow(self, cookie, priority, dl_type=0, dl_dst=0,
                            dl_vlan=0, dst_ip=0, dst_mask=32, nw_proto=0,
-                           ip_proto=None, idle_timeout=0):
+                           idle_timeout=0):
         miss_send_len = UINT16_MAX
         actions = [self.dp.ofproto_parser.OFPActionOutput(
             self.dp.ofproto.OFPP_CONTROLLER, miss_send_len)]
         self.set_flow(cookie, priority, dl_type=dl_type, dl_dst=dl_dst,
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
-                      nw_proto=nw_proto, actions=actions, ip_proto=ip_proto,
+                      nw_proto=nw_proto, actions=actions,
                       idle_timeout=idle_timeout)
 
     def set_failover_group(self, group_id, watch_ports, out_ports, src_macs,
@@ -252,3 +274,89 @@ class OfCtl(object):
         self.logger.debug('Sending ARP from %s to %s', src_ip, dst_ip)
 
 
+@OfCtl.register_of_version(ofproto_v1_3.OFP_VERSION)
+class OfCtl_v1_3(OfCtl):
+    def __init__(self, dp, logger):
+        super(OfCtl_v1_3, self).__init__(dp, logger)
+
+
+@OfCtl.register_of_version(ofproto_v1_4.OFP_VERSION)
+class OfCtl_v1_4(OfCtl):
+    def __init__(self, dp, logger):
+        super(OfCtl_v1_4, self).__init__(dp, logger)
+
+    def set_sw_config_for_ttl(self):
+        pass
+        # properties = [
+        # self.ofp_parser.OFPAsyncConfigPropReasons(
+        #         self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
+        #         (1 << self.ofp.OFPR_APPLY_ACTION |
+        #          1 << self.ofp.OFPR_INVALID_TTL |
+        #          1 << self.ofp.OFPR_ACTION_SET |
+        #          1 << self.ofp.OFPR_GROUP |
+        #          1 << self.ofp.OFPR_PACKET_OUT)),
+        #     self.ofp_parser.OFPAsyncConfigPropReasons(
+        #         self.ofp.OFPACPT_PORT_STATUS_MASTER, 8,
+        #         (1 << self.ofp.OFPPR_ADD |
+        #          1 << self.ofp.OFPPR_DELETE |
+        #          1 << self.ofp.OFPPR_MODIFY)),
+        #     self.ofp_parser.OFPAsyncConfigPropReasons(
+        #         self.ofp.OFPACPT_FLOW_REMOVED_MASTER, 8,
+        #         (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
+        #          1 << self.ofp.OFPRR_HARD_TIMEOUT |
+        #          1 << self.ofp.OFPRR_DELETE |
+        #          1 << self.ofp.OFPRR_GROUP_DELETE |
+        #          1 << self.ofp.OFPRR_METER_DELETE |
+        #          1 << self.ofp.OFPRR_EVICTION))]
+        # req = self.ofp_parser.OFPSetAsync(self.dp, properties)
+        # self.dp.send_msg(req)
+
+    def set_flow(self, cookie, priority, dl_type=None, dl_dst=None,
+                 dl_vlan=None,
+                 nw_src=None, src_mask=32, nw_dst=None, dst_mask=32,
+                 nw_proto=None, idle_timeout=0, actions=None, in_port=None):
+        ofp = self.ofp
+        ofp_parser = self.ofp_parser
+        cmd = ofp.OFPFC_ADD
+
+        # Match
+        match_params = {}
+        if dl_type:
+            match_params['eth_type'] = dl_type
+        if dl_dst:
+            match_params['eth_dst'] = dl_dst
+        if dl_vlan:
+            match_params['vlan_vid'] = dl_vlan
+        if in_port:
+            match_params['in_port'] = in_port
+        if nw_src:
+            match_params['ipv4_src'] = (
+                nw_src, mask_ntob(src_mask))
+        if nw_dst:
+            match_params['ipv4_dst'] = (
+                nw_dst, mask_ntob(dst_mask))
+        if nw_proto:
+            match_params['ip_proto'] = nw_proto
+            if dl_type == ether.ETH_TYPE_ARP:
+                match_params['arp_op'] = nw_proto
+        match = ofp_parser.OFPMatch(**match_params)
+
+        # Instructions
+        actions = actions or []
+        inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                                 actions)]
+        m = ofp_parser.OFPFlowMod(datapath=self.dp,
+                                  cookie=cookie,
+                                  cookie_mask=0,
+                                  table_id=0,
+                                  command=cmd,
+                                  idle_timeout=idle_timeout,
+                                  hard_timeout=0,
+                                  priority=priority,
+                                  buffer_id=ofp.OFP_NO_BUFFER,
+                                  out_port=ofp.OFPP_ANY,
+                                  out_group=ofp.OFPG_ANY,
+                                  flags=0,
+                                  match=match,
+                                  instructions=inst)
+        self.dp.send_msg(m)
