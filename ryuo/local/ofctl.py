@@ -1,8 +1,10 @@
+import subprocess
 from ryu.exception import OFPUnknownVersion
 from ryu.ofproto import inet
 from ryu.ofproto import ether
 from ryu.lib.packet import packet
 from ryu.ofproto import ofproto_v1_3, ofproto_v1_4
+import threading
 
 from ryuo.utils import *
 from ryuo.constants import *
@@ -13,6 +15,8 @@ UINT32_MAX = 0xffffffff
 
 class OfCtl(object):
     _OF_VERSIONS = {}
+    lock = threading.Lock()
+    switch_inited = False
 
     def __init__(self, dp, logger):
         super(OfCtl, self).__init__()
@@ -289,14 +293,14 @@ class OfCtl_v1_4(OfCtl):
         pass
         # properties = [
         # self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
-        #         (1 << self.ofp.OFPR_APPLY_ACTION |
-        #          1 << self.ofp.OFPR_INVALID_TTL |
-        #          1 << self.ofp.OFPR_ACTION_SET |
-        #          1 << self.ofp.OFPR_GROUP |
-        #          1 << self.ofp.OFPR_PACKET_OUT)),
-        #     self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_PORT_STATUS_MASTER, 8,
+        # self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
+        # (1 << self.ofp.OFPR_APPLY_ACTION |
+        # 1 << self.ofp.OFPR_INVALID_TTL |
+        # 1 << self.ofp.OFPR_ACTION_SET |
+        # 1 << self.ofp.OFPR_GROUP |
+        # 1 << self.ofp.OFPR_PACKET_OUT)),
+        # self.ofp_parser.OFPAsyncConfigPropReasons(
+        # self.ofp.OFPACPT_PORT_STATUS_MASTER, 8,
         #         (1 << self.ofp.OFPPR_ADD |
         #          1 << self.ofp.OFPPR_DELETE |
         #          1 << self.ofp.OFPPR_MODIFY)),

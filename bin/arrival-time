@@ -1,0 +1,52 @@
+#!/usr/bin/env python2
+import argparse
+from matplotlib import pyplot
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import numpy
+from scapy.utils import rdpcap
+import sys
+from ryuo.scapy.layers import Pktgen
+from ryuo.tests.utils import get_lost_sequence
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Check arrival time of packets')
+    parser.add_argument('-f', '--pcap-file', help='pcap file')
+
+    args = parser.parse_args()
+    print >> sys.stderr, 'Reading packet from %s' % args.pcap_file
+    pkts = rdpcap(args.pcap_file)
+    lost_sequence, max_seq, dummy = get_lost_sequence(pkts)
+    counter = len(lost_sequence)
+    print str(lost_sequence), max_seq, counter
+    arr_times = [pkt.time for pkt in pkts if Pktgen in pkt][
+                lost_sequence[0] - 25:lost_sequence[0] + 25]
+    seqs = [pkt[Pktgen].seq for pkt in pkts if Pktgen in pkt][
+           lost_sequence[0] - 25:lost_sequence[0] + 25]
+    arr_times = [time - arr_times[0] for time in arr_times]
+    pkts = None
+
+    fig, (ax_scatter1, ax_scatter2) = pyplot.subplots(1, 2, sharey=True)
+    fig.subplots_adjust(wspace=0.1)
+    ax_scatter1.set_yticks([0, 1, 2])
+    ax_scatter1.spines['right'].set_visible(False)
+    ax_scatter2.spines['left'].set_visible(False)
+
+    limit1 = 0
+    begin2 = 0
+    for idx, arr_time in enumerate(arr_times):
+        if idx > 0 and arr_time - arr_times[idx - 1] > 0.001:
+            limit1 = arr_times[idx - 1]
+            begin2 = arr_time
+    ax_scatter1.set_xlim(limit1 - 0.00005 - (arr_times[-1] - begin2),
+                         limit1 + 0.00005)
+    ax_scatter2.set_xlim(begin2 - 0.00005, arr_times[-1] + 0.00005)
+    for idx, arr_time in enumerate(arr_times):
+        ax_scatter1.scatter(arr_time, 1)
+        ax_scatter2.scatter(arr_time, 1)
+        ax_scatter1.text(arr_time, 1.1, str(seqs[idx]), va='center',
+                         ha='center', rotation=60, zorder=10)
+        ax_scatter2.text(arr_time, 1.1, str(seqs[idx]), va='center',
+                         ha='center', rotation=60, zorder=10)
+
+    pyplot.show()

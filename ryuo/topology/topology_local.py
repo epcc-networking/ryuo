@@ -128,7 +128,6 @@ class TopologyLocal(LocalController):
                 self._port_added(port)
                 self._report_port_added(port)
                 self.lldp_event.set()
-                self.lldp_event.set()
         elif reason == ofp.OFPPR_DELETE:
             self._logger.info('Port %d deleted.', ofpport.port_no)
             port = self._get_port(ofpport.port_no)
