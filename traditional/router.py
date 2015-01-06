@@ -146,7 +146,8 @@ class Router():
 
     def send_icmp_unreach_error(self, packet_buffer):
         # Send ICMP host unreach error.
-        src_ip = self._get_send_port_ip(packet_buffer.header_list)
+        src_ip = self._get_send_port_ip(packet_buffer.header_list,
+                                        packet_buffer.in_port)
         if src_ip is not None:
             self.ofctl.reply_icmp(packet_buffer.in_port,
                                   packet_buffer.header_list,
@@ -303,7 +304,7 @@ class Router():
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
         in_port = self.ofctl.get_packet_in_inport(msg)
-        src_ip = self._get_send_port_ip(headers)
+        src_ip = self._get_send_port_ip(headers, in_port)
         self.ofctl.reply_icmp(in_port, headers, ICMP_ECHO_REPLY,
                               ICMP_ECHO_REPLY_CODE,
                               src_ip=src_ip,
@@ -311,7 +312,7 @@ class Router():
 
     def _packet_in_tcp_udp(self, msg, headers):
         in_port = self.ofctl.get_packet_in_inport(msg)
-        src_ip = self._get_send_port_ip(headers)
+        src_ip = self._get_send_port_ip(headers, in_port)
         self.ofctl.reply_icmp(in_port, headers, ICMP_DEST_UNREACH,
                               ICMP_PORT_UNREACH_CODE,
                               src_ip=src_ip,
@@ -339,7 +340,7 @@ class Router():
                                             dec_ttl=True)
                 self._logger.info('Set implicit routing flow to %s', src_ip)
 
-    def _get_send_port_ip(self, headers):
+    def _get_send_port_ip(self, headers, in_port=None):
         try:
             src_mac = headers[ETHERNET].src
             if IPV4 in headers:
@@ -363,6 +364,8 @@ class Router():
 
         self._logger.info('Receive packet from unknown IP %s',
                           ip_addr_ntoa(src_ip))
+
+        return self.ports[in_port].ip
 
 
 class Ports(dict):
