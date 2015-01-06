@@ -69,10 +69,10 @@ class OutputDelayedController(RemoteController):
         command = 'tc qdisc add dev lo root handle 1: prio'
         subprocess.call(command.split(' '))
         command = 'tc qdisc add dev lo parent 1:3 handle 10: ' \
-                  'netem  delay %dms' % self.delay
+                  'netem delay %dms' % self.delay
         subprocess.call(command.split(' '))
         command = 'tc filter add dev lo protocol ip parent 1:0 prio 3 u32 ' \
-                  'match ip dst %s/32 flowid 1:3' % self.ip
+                  'match ip src %s/32 flowid 1:3' % self.ip
         subprocess.call(command.split(' '))
 
     def stop(self):
