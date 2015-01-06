@@ -1,8 +1,8 @@
 from Queue import Queue
 
 from routing import Routing, BaseRoutingTable, BaseRoute
+from ryuo.kf_routing.utils import compare_link
 from ryuo.utils import nw_addr_aton, ip_addr_aton, ip_addr_ntoa
-from ryuo.kf_routing.app import KFRoutingApp
 
 
 class KFRouting(Routing):
@@ -70,7 +70,7 @@ class KFRouting(Routing):
                                                                  dst)
                     sorted_candidates = sorted(candidates,
                                                cmp=lambda x, y:
-                                               KFRoutingApp.compare_link(
+                                               compare_link(
                                                    x, y,
                                                    level,
                                                    degree,

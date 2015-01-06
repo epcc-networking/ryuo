@@ -6,7 +6,7 @@ from ryu.controller import dpset
 from ryu.controller import ofp_event
 from ryu.controller.handler import set_ev_cls
 from ryu.controller.handler import MAIN_DISPATCHER
-from ryu.ofproto import ofproto_v1_3
+from ryu.ofproto import ofproto_v1_3, ofproto_v1_4
 from ryu.topology.api import get_all_switch
 from ryu.topology.api import get_all_link
 
@@ -18,7 +18,7 @@ from ryuo.utils import config_logger
 
 
 class ResilientApp(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
+    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION, ofproto_v1_4.OFP_VERSION]
 
     _CONTEXTS = {'dpset': dpset.DPSet,
                  'wsgi': WSGIApplication}

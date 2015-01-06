@@ -2,7 +2,7 @@ import os
 import subprocess
 
 from mininet.log import warn, info
-from mininet.node import OVSSwitch, Host
+from mininet.node import OVSSwitch, Host, RemoteController
 from mininet.node import Controller
 
 
@@ -52,9 +52,10 @@ class RyuoLocalController(Controller):
                             **kwargs)
 
 
-class OutputDelayedLocalController(Controller):
+class OutputDelayedController(RemoteController):
     def __init__(self, name, ip='127.0.0.2', port=6633, delay=1, **kwargs):
-        super(OutputDelayedLocalController, self).__init__(name, ip, port,
+        super(OutputDelayedController, self).__init__(name, ip=ip,
+                                                      port=port,
                                                            **kwargs)
         self.delay = delay
 

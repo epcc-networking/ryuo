@@ -6,17 +6,17 @@ import sys
 from mininet.cli import CLI
 from mininet.log import setLogLevel
 from mininet.net import Mininet
-from mininet.node import RemoteController
+from mininet.node import OVSSwitch
 from mininet.topo import Topo
 
-from ryuo.mininet.node import TestingHost, RyuoOVSSwitch
+from ryuo.mininet.node import TestingHost, OutputDelayedController
 from ryuo.tests.utils import add_addresses, request_routing
 
 
 OFP = 'OpenFlow14'  #
 
 
-class SwitchOverTimeTestingTopo(Topo):
+class SimpleTraditionalTestingTopo(Topo):
     """
       1.2       1.1  2.1        2.2  5.1    5.2
     h1-------------s1--------------s2----------h2
@@ -32,12 +32,8 @@ class SwitchOverTimeTestingTopo(Topo):
         h1 = self.addHost('h1')
         h2 = self.addHost('h2')
 
-        s = [self.addSwitch('s%d' % (i + 1),
-                            controller_dir='.',
-                            ryu_args=['ryuo.kf_routing.kf_routing_local',
-                                      'ryuo.topology.topology_local'],
-                            port=6634 + i,
-                            protocols=OFP) for i in range(0, 3)]
+        s = [self.addSwitch('s%d' % (i + 1), protocols=OFP) for i in
+             range(0, 3)]
 
         self.addLink(h1, s[0])
         self.addLink(h2, s[1])
@@ -54,16 +50,26 @@ class SwitchOverTimeTestingTopo(Topo):
 
 if __name__ == '__main__':
     for i in range(int(sys.argv[1])):
-        ryuo = subprocess.Popen(['ryu-manager', 'ryuo.kf_routing.app'],
-                                stdin=subprocess.PIPE)
+        ryu = subprocess.Popen(['ryu-manager',
+                                '--ofp-listen-host', '127.0.0.2',
+                                '--observe-links',
+                                'traditional/resilient_app.py'],
+                               stdin=subprocess.PIPE)
         time.sleep(4)
-        RyuoOVSSwitch.setup()
+        OVSSwitch.setup()
         setLogLevel('debug')
-        net = Mininet(topo=SwitchOverTimeTestingTopo(),
-                      switch=RyuoOVSSwitch,
-                      controller=RemoteController,
+        net = Mininet(topo=SimpleTraditionalTestingTopo(),
+                      switch=OVSSwitch,
+                      controller=OutputDelayedController('c0', delay=30),
                       host=TestingHost)
         net.start()
+
+        h1 = net.hosts[0]
+        h2 = net.hosts[1]
+        h1.setIP('10.0.1.2/24')
+        h2.setIP('10.0.5.2/24')
+        h1.setDefaultRoute('via 10.0.1.1')
+        h2.setDefaultRoute('via 10.0.5.1')
         time.sleep(10)
         addresses = [['10.0.1.1/24', 1, 1],
                      ['10.0.2.1/24', 1, 2],
@@ -73,19 +79,13 @@ if __name__ == '__main__':
                      ['10.0.5.1/24', 2, 1],
                      ['10.0.3.2/24', 3, 1],
                      ['10.0.4.2/24', 3, 2]]
-        add_addresses(addresses, '127.0.0.1')
-        request_routing('127.0.0.1')
-        h1 = net.hosts[0]
-        h2 = net.hosts[1]
-        h1.setIP('10.0.1.2/24')
-        h2.setIP('10.0.5.2/24')
-        h1.setDefaultRoute('via 10.0.1.1')
-        h2.setDefaultRoute('via 10.0.5.1')
+        add_addresses(addresses, '127.0.0.2')
+        request_routing('127.0.0.2')
 
         # ARP handling will cause high packet loss on the first second
         # net.pingAll()
 
         CLI(net)
         net.stop()
-        ryuo.kill()
-        ryuo.wait()
+        ryu.kill()
+        ryu.wait()

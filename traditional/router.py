@@ -25,7 +25,7 @@ class Router():
         self._init_logger()
         self._routing = routing
         self.ports = Ports(dp.ports)
-        self.ofctl = OfCtl(dp, self._logger)
+        self.ofctl = OfCtl.factory(dp, self._logger)
         self.packet_buffer = SuspendPacketList(self.send_icmp_unreach_error)
         self._init_flows()
         self._group_id = 1
@@ -48,12 +48,12 @@ class Router():
 
         priority, dummy = get_priority(PRIORITY_MAC_LEARNING)
         self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
-                                     dst_ip=nw, dst_mask=mask)
+                                      dst_ip=nw, dst_mask=mask)
         self._logger.info('Set MAC learning for %s', ip)
         # IP handling
         priority, dummy = get_priority(PRIORITY_IP_HANDLING)
         self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
-                                     dst_ip=ip)
+                                      dst_ip=ip)
         self._logger.info('Set IP handling for %s', ip)
         # L2 switching
         out_port = self.ofctl.dp.ofproto.OFPP_NORMAL
@@ -149,18 +149,18 @@ class Router():
         src_ip = self._get_send_port_ip(packet_buffer.header_list)
         if src_ip is not None:
             self.ofctl.reply_icmp(packet_buffer.in_port,
-                                 packet_buffer.header_list,
-                                 icmp.ICMP_DEST_UNREACH,
-                                 icmp.ICMP_HOST_UNREACH_CODE,
-                                 msg_data=packet_buffer.data,
-                                 src_ip=src_ip)
+                                  packet_buffer.header_list,
+                                  icmp.ICMP_DEST_UNREACH,
+                                  icmp.ICMP_HOST_UNREACH_CODE,
+                                  msg_data=packet_buffer.data,
+                                  src_ip=src_ip)
             self._logger.info('Send ICMP unreachable to %s',
                               packet_buffer.dst_ip)
 
     def set_group(self, src_macs, dst_macs, watch_ports, out_ports):
         self.ofctl.add_failover_group(self._group_id, watch_ports, out_ports,
                                       src_macs,
-                             dst_macs)
+                                      dst_macs)
         self._group_id += 1
         return self._group_id - 1
 
@@ -200,7 +200,7 @@ class Router():
         # ARP
         priority, dummy = get_priority(PRIORITY_ARP_HANDLING)
         self.ofctl.set_packet_in_flow(cookie, priority,
-                                     dl_type=ether.ETH_TYPE_ARP)
+                                      dl_type=ether.ETH_TYPE_ARP)
         # Drop by default 
         priority, dummy = get_priority(PRIORITY_DEFAULT_ROUTING)
         outport = None
@@ -267,8 +267,8 @@ class Router():
             return
         if src_ip is not None:
             self.ofctl.reply_icmp(in_port, headers, ICMP_TIME_EXCEEDED,
-                                 ICMP_TTL_EXPIRED_CODE,
-                                 msg_data=msg.data, src_ip=src_ip)
+                                  ICMP_TTL_EXPIRED_CODE,
+                                  msg_data=msg.data, src_ip=src_ip)
             self._logger.info('Send ICMP time exceeded to %s from %s', srcip,
                               src_ip)
 
@@ -303,14 +303,19 @@ class Router():
     def _packet_in_icmp_req(self, msg, headers):
         self._logger.info('Receive ICMP request from %s', headers[IPV4].src)
         in_port = self.ofctl.get_packet_in_inport(msg)
+        src_ip = self._get_send_port_ip(headers)
         self.ofctl.reply_icmp(in_port, headers, ICMP_ECHO_REPLY,
-                             ICMP_ECHO_REPLY_CODE,
-                             icmp_data=headers[ICMP].data)
+                              ICMP_ECHO_REPLY_CODE,
+                              src_ip=src_ip,
+                              icmp_data=headers[ICMP].data)
 
     def _packet_in_tcp_udp(self, msg, headers):
         in_port = self.ofctl.get_packet_in_inport(msg)
+        src_ip = self._get_send_port_ip(headers)
         self.ofctl.reply_icmp(in_port, headers, ICMP_DEST_UNREACH,
-                             ICMP_PORT_UNREACH_CODE, msg_data=msg.data)
+                              ICMP_PORT_UNREACH_CODE,
+                              src_ip=src_ip,
+                              msg_data=msg.data)
 
     def _learning_host_mac(self, msg, header_list):
         # Set flow: routing to internal Host.
