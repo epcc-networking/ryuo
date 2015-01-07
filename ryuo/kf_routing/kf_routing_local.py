@@ -333,7 +333,6 @@ class KFRoutingLocal(LocalController):
             else:
                 self.packet_buffer.add(in_port, headers, msg.data)
                 if not self.pending_arps.contains(dst_ip):
-                    self._logger.info('Send ARP request for %s', dst_ip)
                     self.pending_arps.add(dst_ip, out_ip, port.port_no)
         else:
             self._logger.warning('Unknown dst ip %s', dst_ip)
@@ -478,6 +477,7 @@ class _ArpRequest(object):
 
     def timer(self):
         for i in range(0, 5):
+            self.parent.app._logger.info('Sending ARP for %s', self.ip)
             self.parent.app.send_arp(self.out_ip, self.ip, port=self.out_port)
             time.sleep(1)
 
