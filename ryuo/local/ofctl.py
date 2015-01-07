@@ -293,30 +293,29 @@ class OfCtl_v1_4(OfCtl):
         return msg.match.get('in_port', self.ofp.OFPP_ANY)
 
     def set_sw_config_for_ttl(self):
-        pass
-        # properties = [
-        # self.ofp_parser.OFPAsyncConfigPropReasons(
-        # self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
-        # (1 << self.ofp.OFPR_APPLY_ACTION |
-        # 1 << self.ofp.OFPR_INVALID_TTL |
-        # 1 << self.ofp.OFPR_ACTION_SET |
-        # 1 << self.ofp.OFPR_GROUP |
-        # 1 << self.ofp.OFPR_PACKET_OUT)),
-        # self.ofp_parser.OFPAsyncConfigPropReasons(
-        # self.ofp.OFPACPT_PORT_STATUS_MASTER, 8,
-        #         (1 << self.ofp.OFPPR_ADD |
-        #          1 << self.ofp.OFPPR_DELETE |
-        #          1 << self.ofp.OFPPR_MODIFY)),
-        #     self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_FLOW_REMOVED_MASTER, 8,
-        #         (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
-        #          1 << self.ofp.OFPRR_HARD_TIMEOUT |
-        #          1 << self.ofp.OFPRR_DELETE |
-        #          1 << self.ofp.OFPRR_GROUP_DELETE |
-        #          1 << self.ofp.OFPRR_METER_DELETE |
-        #          1 << self.ofp.OFPRR_EVICTION))]
-        # req = self.ofp_parser.OFPSetAsync(self.dp, properties)
-        # self.dp.send_msg(req)
+        properties = [
+            self.ofp_parser.OFPAsyncConfigPropReasons(
+                self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
+                (1 << self.ofp.OFPR_APPLY_ACTION |
+                 1 << self.ofp.OFPR_INVALID_TTL |
+                 1 << self.ofp.OFPR_ACTION_SET |
+                 1 << self.ofp.OFPR_GROUP |
+                 1 << self.ofp.OFPR_PACKET_OUT)),
+            self.ofp_parser.OFPAsyncConfigPropReasons(
+                self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=
+                (1 << self.ofp.OFPPR_ADD |
+                 1 << self.ofp.OFPPR_DELETE |
+                 1 << self.ofp.OFPPR_MODIFY)),
+            self.ofp_parser.OFPAsyncConfigPropReasons(
+                self.ofp.OFPACPT_FLOW_REMOVED_MASTER, mask=
+                (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
+                 1 << self.ofp.OFPRR_HARD_TIMEOUT |
+                 1 << self.ofp.OFPRR_DELETE |
+                 1 << self.ofp.OFPRR_GROUP_DELETE |
+                 1 << self.ofp.OFPRR_METER_DELETE |
+                 1 << self.ofp.OFPRR_EVICTION))]
+        req = self.ofp_parser.OFPSetAsync(self.dp, properties)
+        self.dp.send_msg(req)
 
     def set_flow(self, cookie, priority, dl_type=None, dl_dst=None,
                  dl_vlan=None,
