@@ -277,6 +277,10 @@ class OfCtl(object):
         self.send_packet_out(in_port, output, pkt.data, data_str=str(pkt))
         self.logger.debug('Sending ARP from %s to %s', src_ip, dst_ip)
 
+    def send_get_async_request(self):
+        req = self.ofp_parser.OFPGetAsyncRequest(self.dp)
+        self.dp.send_msg(req)
+
 
 @OfCtl.register_of_version(ofproto_v1_3.OFP_VERSION)
 class OfCtl_v1_3(OfCtl):
@@ -296,7 +300,8 @@ class OfCtl_v1_4(OfCtl):
         properties = [
             self.ofp_parser.OFPAsyncConfigPropReasons(
                 self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
-                (1 << self.ofp.OFPR_APPLY_ACTION |
+                (1 << self.ofp.OFPR_TABLE_MISS |
+                 1 << self.ofp.OFPR_APPLY_ACTION |
                  1 << self.ofp.OFPR_INVALID_TTL |
                  1 << self.ofp.OFPR_ACTION_SET |
                  1 << self.ofp.OFPR_GROUP |

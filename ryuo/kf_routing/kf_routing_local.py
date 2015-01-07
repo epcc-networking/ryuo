@@ -172,6 +172,11 @@ class KFRoutingLocal(LocalController):
             pass
         self.ports[dst_port_no].set_peer_mac(peer_mac)
 
+    @set_ev_cls(ofp_event.EventOFPGetAsyncReply, MAIN_DISPATCHER)
+    def get_async_reply_handler(self, ev):
+        self._logger.info('OFPGetAsyncReply received: properties=%s',
+                          repr(ev.msg.properties))
+
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
 
@@ -186,6 +191,8 @@ class KFRoutingLocal(LocalController):
         self.ofctl.set_routing_flow_v6(cookie, priority, None)
         priority, dummy = _get_priority(PRIORITY_NORMAL)
         self.ofctl.set_normal_flow(cookie, priority)
+
+        self.ofctl.send_get_async_request()
 
     def _install_routing_entry(self, route):
         priority, dummy = _get_priority(PRIORITY_TYPE_ROUTE, route=route)

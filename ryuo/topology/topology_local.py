@@ -163,8 +163,6 @@ class TopologyLocal(LocalController):
             self._logger.warning('Switch left.')
             return
 
-        # LOG.debug('lldp sent dpid=%s, port_no=%d', dp.id, port.port_no)
-        # TODO:XXX
         if dp.ofproto.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
             actions = [dp.ofproto_parser.OFPActionOutput(port.port_no)]
             out = dp.ofproto_parser.OFPPacketOut(

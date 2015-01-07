@@ -60,21 +60,24 @@ class RyuoCPULimitedLocalController(RyuoLocalController):
         super(RyuoCPULimitedLocalController, self).__init__(name, working_dir,
                                                             *ryuArgs, **kwargs)
         self.controller_popen = None
+        self.fout = None
 
     def start(self):
         pathCheck(self.command)
         cout = '/tmp/' + self.name + '.log'
         command = self.command + ' ' + (self.cargs % self.port)
         print command
-        self.controller_popen = self.popen(
-            command,
-            '1>%s' % cout, '2>%s' % cout,
-            shell=True)
+        self.fout = open(cout, 'w')
+        self.controller_popen = self.popen(command.split(' '),
+                                           stdout=self.fout,
+                                           stderr=self.fout)
 
     def stop(self, *args, **kwargs):
-        if self.controller_popen is not None:
+        if self.controller_popen:
             self.controller_popen.kill()
             self.controller_popen.wait()
+        if self.fout:
+            self.fout.close()
 
 
 class OutputDelayedController(RemoteController):
