@@ -257,7 +257,7 @@ class TopologyLocal(LocalController):
         self.ports.lldp_received(dst)
         src = Port(PortData(src_dpid, port_no=src_port_no, hw_addr=src_mac))
         old_peer = self.links.get_peer(dst)
-        need_update = Flase
+        need_update = False
         if old_peer and old_peer != src:
             self._logger.info('Peer changed.')
             self._report_link_deleted(Link(old_peer, dst))
