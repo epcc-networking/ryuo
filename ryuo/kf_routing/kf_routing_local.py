@@ -217,15 +217,15 @@ class KFRoutingLocal(LocalController):
         self.routing_table = None
 
     def _packet_in_arp(self, msg, headers):
+        src_ip = headers[ARP].src_ip
+        dst_ip = headers[ARP].dst_ip
+        self._logger.info('Receive ARP from %s to %s', src_ip, dst_ip)
         src_port = self.ports.get_by_ip(headers[ARP].src_ip)
         if src_port is None:
             return
-        src_ip = headers[ARP].src_ip
         if src_ip not in [port.ip for port in self.ports.values()]:
             self._learn_host_mac(msg, headers)
         in_port = self.ofctl.get_packet_in_inport(msg)
-        dst_ip = headers[ARP].dst_ip
-        self._logger.info('Receive ARP from %s to %s', src_ip, dst_ip)
         if headers[ARP].opcode == ARP_REQUEST:
             src_mac = headers[ARP].src_mac
             dst_mac = self.ports[in_port].mac
@@ -476,7 +476,7 @@ class _ArpRequest(object):
         self.wait_thread = hub.spawn(self.timer)
 
     def timer(self):
-        for i in range(0, 5):
+        for i in range(0, 15):
             self.parent.app._logger.info('Sending ARP for %s', self.ip)
             self.parent.app.send_arp(self.out_ip, self.ip, port=self.out_port)
             time.sleep(1)
