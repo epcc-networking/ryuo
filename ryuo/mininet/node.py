@@ -2,6 +2,7 @@ import os
 import subprocess
 
 from mininet.log import warn, info
+from mininet.moduledeps import pathCheck
 from mininet.node import OVSSwitch, Host, RemoteController
 from mininet.node import Controller
 
@@ -14,10 +15,12 @@ class RyuoOVSSwitch(OVSSwitch):
                  controller_dir='', ryu_args=None, **params):
         super(RyuoOVSSwitch, self).__init__(name, failMode, datapath, inband,
                                             protocols, **params)
-        self.controller = RyuoLocalController('%s-ryu' % name,
-                                              controller_dir,
-                                              *ryu_args,
-                                              **params)
+        if 'inNamespace' in params:
+            del params['inNamespace']
+        self.controller = RyuoCPULimitedLocalController('%s-ryu' % name,
+                                                        controller_dir,
+                                                        *ryu_args,
+                                                        **params)
 
     def start(self, controllers):
         self.controller.start()
@@ -52,11 +55,33 @@ class RyuoLocalController(Controller):
                             **kwargs)
 
 
+class RyuoCPULimitedLocalController(RyuoLocalController):
+    def __init__(self, name, working_dir, *ryuArgs, **kwargs):
+        super(RyuoCPULimitedLocalController, self).__init__(name, working_dir,
+                                                            *ryuArgs, **kwargs)
+        self.controller_popen = None
+
+    def start(self):
+        pathCheck(self.command)
+        cout = '/tmp/' + self.name + '.log'
+        command = self.command + ' ' + (self.cargs % self.port)
+        print command
+        self.controller_popen = self.popen(
+            command,
+            '1>%s' % cout, '2>%s' % cout,
+            shell=True)
+
+    def stop(self, *args, **kwargs):
+        if self.controller_popen is not None:
+            self.controller_popen.kill()
+            self.controller_popen.wait()
+
+
 class OutputDelayedController(RemoteController):
     def __init__(self, name, ip='127.0.0.2', port=6633, delay=1, **kwargs):
         super(OutputDelayedController, self).__init__(name, ip=ip,
                                                       port=port,
-                                                           **kwargs)
+                                                      **kwargs)
         self.delay = delay
 
     @staticmethod
