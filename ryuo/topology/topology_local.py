@@ -198,7 +198,7 @@ class TopologyLocal(LocalController):
 
                 if timeout is None or timeout > expire - now:
                     timeout = expire - now
-                # break
+                    # break
 
             for port in ports_now:
                 self.send_lldp_packet(port)
@@ -247,31 +247,35 @@ class TopologyLocal(LocalController):
                 'Cannot accept LLDP, unsupported OF version %x.',
                 ofp.OFP_VERSION)
         dst = self._get_port(dst_port_no)
-        self._logger.info('LLDP from %d.%d -> %d',
-                          src_dpid,
-                          src_port_no,
-                          dst_port_no)
+        self._logger.debug('LLDP from %d.%d -> %d',
+                           src_dpid,
+                           src_port_no,
+                           dst_port_no)
         if not dst:
             self._logger.warning('Dst not found.')
             return
         self.ports.lldp_received(dst)
         src = Port(PortData(src_dpid, port_no=src_port_no, hw_addr=src_mac))
         old_peer = self.links.get_peer(dst)
+        need_update = Flase
         if old_peer and old_peer != src:
             self._logger.info('Peer changed.')
             self._report_link_deleted(Link(old_peer, dst))
+            need_update = True
         link = Link(src, dst)
         if link not in self.links:
+            need_update = True
             self._report_link_added(Link(src, dst))
             self.lldp_event.set()
 
         # Always return false, since we don't have the reverse link information
-        self.links.update_link(src, dst)
-        self._logger.info('Update link %d.%d -> %d.%d',
-                          src.dpid,
-                          src.port_no,
-                          dst.dpid,
-                          dst.port_no)
+        if need_update:
+            self.links.update_link(src, dst)
+            self._logger.info('Update link %d.%d -> %d.%d',
+                              src.dpid,
+                              src.port_no,
+                              dst.dpid,
+                              dst.port_no)
 
     def link_loop(self):
         while self.is_active:
