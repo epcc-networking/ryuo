@@ -289,6 +289,9 @@ class OfCtl_v1_4(OfCtl):
     def __init__(self, dp, logger):
         super(OfCtl_v1_4, self).__init__(dp, logger)
 
+    def get_packet_in_inport(self, msg):
+        return msg.match.get('in_port', self.ofp.OFPP_ANY)
+
     def set_sw_config_for_ttl(self):
         pass
         # properties = [
