@@ -219,7 +219,10 @@ class KFRoutingLocal(LocalController):
     def _packet_in_arp(self, msg, headers):
         src_ip = headers[ARP].src_ip
         dst_ip = headers[ARP].dst_ip
-        self._logger.info('Receive ARP from %s to %s', src_ip, dst_ip)
+        self._logger.info('Receive ARP %s from %s to %s',
+                          'Request' if headers[ARP].opcode == ARP_REQUEST
+                          else 'Reply'
+                          , src_ip, dst_ip)
         src_port = self.ports.get_by_ip(headers[ARP].src_ip)
         if src_port is None:
             return
@@ -307,7 +310,7 @@ class KFRoutingLocal(LocalController):
         # Ignore all tcp/udp packets
         pass
         # in_port = self.ofctl.get_packet_in_inport(msg)
-        #self.ofctl.reply_icmp(in_port,
+        # self.ofctl.reply_icmp(in_port,
         #                      headers,
         #                      ICMP_DEST_UNREACH,
         #                      ICMP_PORT_UNREACH_CODE,
@@ -700,6 +703,7 @@ class _Port(object):
 
     def set_peer_ip(self, ip):
         self.peer_ip = ip
+
 
 class _DisabledFailoverPorts(dict):
     """
