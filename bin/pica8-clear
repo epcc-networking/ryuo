@@ -1,0 +1,3 @@
+#!/bin/bash
+ovs-ofctl bundle $1 "open:bundle_id=1,add:bundle_id=1,message=del-groups,commit:bundle_id=1"
+ovs-ofctl bundle $1 "open:bundle_id=1,add:bundle_id=1,message=del-flows,commit:bundle_id=1"
