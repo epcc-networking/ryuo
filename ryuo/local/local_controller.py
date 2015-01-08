@@ -81,7 +81,7 @@ class LocalController(app_manager.RyuApp):
             dpid = '?'
         else:
             dpid = dpid_lib.dpid_to_str(dpid)
-            self._logger = logging.getLogger(
+        self._logger = logging.getLogger(
             self.__class__.__name__ + ' ' + dpid)
         config_logger(self._logger)
 
