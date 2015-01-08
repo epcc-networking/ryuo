@@ -92,7 +92,8 @@ class KFRoutingLocal(LocalController):
                                       dst_ip=nw, dst_mask=mask)
         self._logger.info('Set MAC learning for %s', ip)
         # L2 switching
-        out_port = self.ofctl.dp.ofproto.OFPP_NORMAL
+        # out_port = self.ofctl.dp.ofproto.OFPP_NORMAL
+        out_port = None
         priority, dummy = _get_priority(PRIORITY_L2_SWITCHING)
         self.ofctl.set_routing_flow(
             0, priority, out_port,
