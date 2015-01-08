@@ -8,6 +8,7 @@ from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER, \
     CONFIG_DISPATCHER, HANDSHAKE_DISPATCHER
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_3, ofproto_v1_4
+import ryu.lib.dpid as dpid_lib
 
 from ryuo.utils import config_logger, lock_class
 from ryuo.config import CENTRAL_HOST_NAME, RYU_HOST
@@ -79,8 +80,8 @@ class LocalController(app_manager.RyuApp):
         if dpid is None:
             dpid = '?'
         else:
-            dpid = hex(dpid)
-        self._logger = logging.getLogger(
+            dpid = dpid_lib.dpid_to_str(dpid)
+            self._logger = logging.getLogger(
             self.__class__.__name__ + ' ' + dpid)
         config_logger(self._logger)
 

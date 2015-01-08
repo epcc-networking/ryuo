@@ -7,6 +7,7 @@ from ryu.base import app_manager
 from ryu.controller import dpset
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
+import ryu.lib.dpid as dpid_lib
 
 from ryuo.config import RYUO_HOST
 from ryuo.utils import config_logger, lock_class, expose
@@ -46,12 +47,14 @@ class Ryuo(app_manager.RyuApp):
 
     @expose
     def ryuo_switch_enter(self, dpid, uri):
-        self._logger.info('Switch %d comes up on uri: %s', dpid, uri)
+        self._logger.info('Switch %s comes up on uri: %s',
+                          dpid_lib.dpid_to_str(dpid), uri)
         self.local_apps[dpid] = Pyro4.Proxy(uri)
 
     @expose
     def ryuo_switch_leave(self, dpid, uri):
-        self._logger.info('Switch %d leaves on uri %s.', dpid, uri)
+        self._logger.info('Switch %s leaves on uri %s.',
+                          dpid_lib.dpid_to_str(dpid), uri)
         del self.local_apps[dpid]
 
     def _run_rpc_daemon(self):
