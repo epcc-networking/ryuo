@@ -52,8 +52,9 @@ class OfCtl(object):
         # self.logger.debug('Packet out = %s', data_str, extra=self.sw_id)
 
     def set_normal_flow(self, cookie, priority):
-        out_port = self.dp.ofproto.OFPP_NORMAL
-        actions = [self.dp.ofproto_parser.OFPActionOutput(out_port, 0)]
+        # out_port = self.dp.ofproto.OFPP_NORMAL
+        #actions = [self.dp.ofproto_parser.OFPActionOutput(out_port, 0)]
+        actions = []
         self.set_flow(cookie, priority, actions=actions)
 
     def get_packet_in_inport(self, msg):
