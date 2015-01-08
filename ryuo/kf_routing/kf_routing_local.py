@@ -152,8 +152,7 @@ class KFRoutingLocal(LocalController):
 
     @set_ev_cls(EventPortAdd)
     def _on_port_added(self, ev):
-        self.ports[ev.port.port_no] = _Port(ev.port.port_no, ev.port.hw_addr,
-                                            ev.port.name)
+        self._init_port(ev.port)
 
     @set_ev_cls(EventPortModify)
     def _on_port_modified(self, ev):
@@ -173,10 +172,20 @@ class KFRoutingLocal(LocalController):
             pass
         self.ports[dst_port_no].set_peer_mac(peer_mac)
 
-    @set_ev_cls(ofp_event.EventOFPGetAsyncReply, MAIN_DISPATCHER)
-    def get_async_reply_handler(self, ev):
-        self._logger.info('OFPGetAsyncReply received: properties=%s',
-                          repr(ev.msg.properties))
+    def _init_port(self, ofpport):
+        self.ports[ofpport.port_no] = _Port(ofpport.port_no, ofpport.hw_addr,
+                                            ofpport.name)
+        priority, dummy = _get_priority(PRIORITY_ARP_HANDLING)
+        self.ofctl.set_packet_in_flow(
+            0, priority,
+            dl_type=ether.ETH_TYPE_ARP,
+            dl_dst=ofpport.hw_addr,
+            in_port=ofpport.port_no)
+        self.ofctl.set_packet_in_flow(
+            0, priority,
+            dl_type=ether.ETH_TYPE_ARP,
+            dl_dst=mac_lib.BROADCAST_STR,
+            in_port=ofpport.port_no)
 
     def get_ips(self):
         return [port.ip for port in self.ports.values()]
@@ -184,9 +193,9 @@ class KFRoutingLocal(LocalController):
     def _init_switch(self):
         cookie = 0
         self.ofctl.set_sw_config_for_ttl()
-        priority, dummy = _get_priority(PRIORITY_ARP_HANDLING)
-        self.ofctl.set_packet_in_flow(cookie, priority,
-                                      dl_type=ether.ETH_TYPE_ARP)
+        # priority, dummy = _get_priority(PRIORITY_ARP_HANDLING)
+        # self.ofctl.set_packet_in_flow(cookie, priority,
+        # dl_type=ether.ETH_TYPE_ARP)
         priority, dummy = _get_priority(PRIORITY_DEFAULT_ROUTING)
         self.ofctl.set_routing_flow(cookie, priority, None)
         self.ofctl.set_routing_flow_v6(cookie, priority, None)
@@ -209,9 +218,7 @@ class KFRoutingLocal(LocalController):
     def _switch_enter(self, dp):
         super(KFRoutingLocal, self)._switch_enter(dp)
         for ofpport in dp.ports.values():
-            self.ports[ofpport.port_no] = _Port(ofpport.port_no,
-                                                ofpport.hw_addr,
-                                                ofpport.name)
+            self._init_port(ofpport)
         self.groups = _GroupTable(self.ofctl, self.ports)
         self.routing_table = _RoutingTable(self._logger)
         self.arp_table = _ArpTable(self._logger)
@@ -319,9 +326,9 @@ class KFRoutingLocal(LocalController):
         pass
         # in_port = self.ofctl.get_packet_in_inport(msg)
         # self.ofctl.reply_icmp(in_port,
-        #                      headers,
-        #                      ICMP_DEST_UNREACH,
-        #                      ICMP_PORT_UNREACH_CODE,
+        # headers,
+        # ICMP_DEST_UNREACH,
+        # ICMP_PORT_UNREACH_CODE,
         #                      msg_data=msg.data)
         #self._logger.info('Receive TCP/UDP from %s, sending icmp unreachable',
         #                  headers[IPV4].src)
@@ -393,9 +400,10 @@ class KFRoutingLocal(LocalController):
         return None
 
     @set_ev_cls(ofp_event.EventOFPGetAsyncReply, MAIN_DISPATCHER)
-    def ger_async_reply_handler(self, ev):
+    def get_async_reply_handler(self, ev):
         msg = ev.msg
-        self._logger.info('OFPGetAsyncReply: %s', repr(msg.properties))
+        self._logger.info('OFPGetAsyncReply: %s',
+                          self.ofctl.async_config_to_str(msg))
 
 
 class _ArpEntry(object):
@@ -488,7 +496,8 @@ class _ArpRequest(object):
 
     def timer(self):
         for i in range(0, 15):
-            self.parent.app._logger.info('Sending ARP for %s', self.ip)
+            self.parent.app._logger.info('Sending ARP for %s on self.out_port',
+                                         self.ip)
             self.parent.app.send_arp(self.out_ip, self.ip, port=self.out_port)
             time.sleep(1)
 

@@ -1,5 +1,6 @@
 import subprocess
 from ryu.exception import OFPUnknownVersion
+from ryu.lib.mac import haddr_to_bin
 from ryu.ofproto import inet
 from ryu.ofproto import ether
 from ryu.lib.packet import packet
@@ -42,6 +43,17 @@ class OfCtl(object):
         else:
             raise OFPUnknownVersion(version=of_version)
 
+    def async_config_to_str(self, msg):
+        return ('packet_in_mask=0x%08x:0x%08x '
+                'port_status_mask=0x%08x:0x%08x '
+                'flow_removed_mask=0x%08x:0x%08x' % (
+                    msg.packet_in_mask[0],
+                    msg.packet_in_mask[1],
+                    msg.port_status_mask[0],
+                    msg.port_status_mask[1],
+                    msg.flow_removed_mask[0],
+                    msg.flow_removed_mask[1]))
+
     def send_packet_out(self, in_port, output, data, data_str=None):
         actions = [self.dp.ofproto_parser.OFPActionOutput(output, 0)]
         self.dp.send_packet_out(buffer_id=UINT32_MAX, in_port=in_port,
@@ -53,7 +65,7 @@ class OfCtl(object):
 
     def set_normal_flow(self, cookie, priority):
         # out_port = self.dp.ofproto.OFPP_NORMAL
-        #actions = [self.dp.ofproto_parser.OFPActionOutput(out_port, 0)]
+        # actions = [self.dp.ofproto_parser.OFPActionOutput(out_port, 0)]
         actions = []
         self.set_flow(cookie, priority, actions=actions)
 
@@ -114,9 +126,10 @@ class OfCtl(object):
             [flow_removed_mask, 0])
         self.dp.send_msg(m)
 
-    def set_flow(self, cookie, priority, dl_type=0, dl_dst=0, dl_vlan=0,
-                 nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
-                 nw_proto=0, idle_timeout=0, actions=None, in_port=None):
+    def set_flow(self, cookie, priority, dl_type=None, dl_dst=None,
+                 dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                 dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                 in_port=None):
         ofp = self.dp.ofproto
         ofp_parser = self.dp.ofproto_parser
         cmd = ofp.OFPFC_ADD
@@ -126,6 +139,8 @@ class OfCtl(object):
         if dl_type:
             match.set_dl_type(dl_type)
         if dl_dst:
+            if type(dl_dst) == str:
+                dl_dst = haddr_to_bin(dl_dst)
             match.set_dl_dst(dl_dst)
         if dl_vlan:
             match.set_vlan_vid(dl_vlan)
@@ -157,14 +172,14 @@ class OfCtl(object):
 
     def set_packet_in_flow(self, cookie, priority, dl_type=0, dl_dst=0,
                            dl_vlan=0, dst_ip=0, dst_mask=32, nw_proto=0,
-                           idle_timeout=0):
+                           idle_timeout=0, in_port=None):
         miss_send_len = UINT16_MAX
         actions = [self.dp.ofproto_parser.OFPActionOutput(
             self.dp.ofproto.OFPP_CONTROLLER, miss_send_len)]
         self.set_flow(cookie, priority, dl_type=dl_type, dl_dst=dl_dst,
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
                       nw_proto=nw_proto, actions=actions,
-                      idle_timeout=idle_timeout)
+                      idle_timeout=idle_timeout, in_port=in_port)
 
     def set_failover_group(self, group_id, watch_ports, out_ports, src_macs,
                            dst_macs, command):
@@ -293,6 +308,9 @@ class OfCtl_v1_3(OfCtl):
 class OfCtl_v1_4(OfCtl):
     def __init__(self, dp, logger):
         super(OfCtl_v1_4, self).__init__(dp, logger)
+
+    def async_config_to_str(self, msg):
+        return repr(msg.properties)
 
     def get_packet_in_inport(self, msg):
         return msg.match.get('in_port', self.ofp.OFPP_ANY)
