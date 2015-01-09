@@ -483,7 +483,13 @@ class _PendingArps(object):
         self.items = [item for item in self.items if item.ip != ip]
 
     def contains(self, ip):
-        return len([item for item in self.items if item.ip == ip]) != 0
+        seleted = [item for item in self.items if item.ip == ip]
+        if len(seleted) == 0:
+            return False
+        if seleted[0].done:
+            self.delete(ip)
+            return False
+        return True
 
 
 class _ArpRequest(object):
@@ -493,6 +499,7 @@ class _ArpRequest(object):
         self.out_ip = out_ip
         self.out_port = out_port
         self.wait_thread = hub.spawn(self.timer)
+        self.done = False
 
     def timer(self):
         for i in range(0, 15):
@@ -500,7 +507,7 @@ class _ArpRequest(object):
                                          self.ip, self.out_port)
             self.parent.app.send_arp(self.out_ip, self.ip, port=self.out_port)
             time.sleep(1)
-        self.parent.delete(self.ip)
+        self.done = True
 
 
 class _SuspendPacketList(list):
