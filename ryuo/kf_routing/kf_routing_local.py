@@ -31,7 +31,7 @@ class KFRoutingLocal(LocalController):
         kwargs['ryuo_name'] = KFRoutingApp.__name__
         super(KFRoutingLocal, self).__init__(*args, **kwargs)
         self.ports = _Ports()  # port_no -> Port
-        self.arp_table = None, self.out_port
+        self.arp_table = None
         self.groups = None
         self.routing_table = None
         self.disabled_failover_ports = None
