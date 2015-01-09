@@ -496,8 +496,8 @@ class _ArpRequest(object):
 
     def timer(self):
         for i in range(0, 15):
-            self.parent.app._logger.info('Sending ARP for %s on self.out_port',
-                                         self.ip)
+            self.parent.app._logger.info('Sending ARP for %s on %d',
+                                         self.ip, self.out_port)
             self.parent.app.send_arp(self.out_ip, self.ip, port=self.out_port)
             time.sleep(1)
 
