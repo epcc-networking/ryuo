@@ -31,7 +31,7 @@ class KFRoutingLocal(LocalController):
         kwargs['ryuo_name'] = KFRoutingApp.__name__
         super(KFRoutingLocal, self).__init__(*args, **kwargs)
         self.ports = _Ports()  # port_no -> Port
-        self.arp_table = None
+        self.arp_table = None, self.out_port
         self.groups = None
         self.routing_table = None
         self.disabled_failover_ports = None
@@ -500,6 +500,7 @@ class _ArpRequest(object):
                                          self.ip, self.out_port)
             self.parent.app.send_arp(self.out_ip, self.ip, port=self.out_port)
             time.sleep(1)
+        self.parent.delete(self.ip)
 
 
 class _SuspendPacketList(list):
