@@ -1,3 +1,5 @@
+import threading
+
 from ryu.exception import OFPUnknownVersion
 from ryu.lib.mac import haddr_to_bin
 from ryu.ofproto import inet
@@ -5,7 +7,6 @@ from ryu.ofproto import ether
 from ryu.lib.packet import packet
 from ryu.ofproto import ofproto_v1_0, ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 from ryu.ofproto import ofproto_v1_3_parser
-import threading
 
 from ryuo.utils import *
 from ryuo.constants import *
@@ -351,6 +352,8 @@ class OfCtl_v1_2(OfCtl_v1_0):
             actions.append(ofp_parser.OFPActionGroup(group_id=out_group))
 
         self._mod_flow(command, cookie, priority, eth_type=eth_type,
+
+
                        dl_vlan=dl_vlan,
                        nw_src=nw_src, src_mask=src_mask,
                        nw_dst=nw_dst, dst_mask=dst_mask,

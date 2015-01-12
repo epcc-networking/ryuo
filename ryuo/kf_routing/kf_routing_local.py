@@ -45,7 +45,7 @@ class KFRoutingLocal(LocalApp):
         group = self.groups[group_id]
         route = self.routing_table.add_entry(dst_ip=dst_ip,
                                              in_port=group.inport,
-                                             out_group=group_id)
+                                             out_group=group)
         self._install_routing_entry(route)
         self._logger.info('Route to %s from port %d to ports %s',
                           dst_ip, group.inport,
@@ -219,11 +219,15 @@ class KFRoutingLocal(LocalApp):
                                         dst_mask=route.netmask,
                                         dec_ttl=True,
                                         in_port=route.in_port,
-                                        out_group=route.out_group)
+                                        out_group=route.out_group.id)
         else:
-            port = self.groups[route.out_group].output_ports[0]
+            group = route.out_group
+            port = self._get_active_port(group.watch_ports, group.output_ports)
             src_mac = self.ports[port].mac
             dst_mac = self.ports[port].peer_mac
+            route.active_out_port = port
+            if port == route.in_port:
+                port = self.dp.ofproto.OFPP_IN_PORT
             self.ofctl.set_routing_flow(0,
                                         priority,
                                         port,
@@ -235,7 +239,30 @@ class KFRoutingLocal(LocalApp):
                                         in_port=route.in_port)
 
     def _update_routes(self):
-        pass
+        for route in self.routing_table.values():
+            group = route.out_group
+            active_port = self._get_active_port(group.watch_ports,
+                                                group.output_ports)
+            if (active_port is not None and
+                        active_port != route.active_out_port):
+                src_mac = self.ports[active_port].mac
+                dst_mac = self.ports[active_port].peer_mac
+                priority, dummy = _get_priority(PRIORITY_TYPE_ROUTE,
+                                                route=route)
+                self._logger.info(
+                    'Route from port %d to %s failover from %d to %d',
+                    route.in_port, route.dst_ip, route.active_out_port,
+                    active_port)
+                route.active_out_port = active_port
+                if active_port == route.in_port:
+                    active_port = self.dp.ofproto.OFPP_IN_PORT
+                self.ofctl.update_routing_flow(0, priority, active_port,
+                                               src_mac=src_mac,
+                                               dst_mac=dst_mac,
+                                               nw_dst=route.dst_ip,
+                                               dst_mask=route.netmask,
+                                               dec_ttl=True,
+                                               in_port=route.in_port)
 
     def _switch_enter(self, dp):
         super(KFRoutingLocal, self)._switch_enter(dp)
@@ -416,11 +443,17 @@ class KFRoutingLocal(LocalApp):
         route = self.routing_table.get_data_by_dst_ip(dst_ip)
         if route is None:
             return None
-        group = self.groups[route.out_group]
-        for port_no in group.output_ports:
-            if self.ports[port_no].status == PORT_UP:
-                return self.ports[port_no]
+        group = route.out_group
+        active_port_no = self._get_active_port(group.watch_ports,
+                                               group.output_ports)
+        if active_port_no is not None:
+            return self.ports[active_port_no]
         return None
+
+    def _get_active_port(self, watch_ports, out_ports):
+        for idx, port_no in enumerate(watch_ports):
+            if self.ports[port_no].status == PORT_UP:
+                return out_ports[idx]
 
     @set_ev_cls(ofp_event.EventOFPGetAsyncReply, MAIN_DISPATCHER)
     def get_async_reply_handler(self, ev):
@@ -656,6 +689,9 @@ class _Route(object):
         self.netmask = netmask
         self.in_port = in_port
         self.out_group = out_group
+
+        # Used only in OpenFlow 1.0
+        self.active_out_port = None
 
 
 class _RoutingTable(dict):
