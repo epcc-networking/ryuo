@@ -7,7 +7,7 @@ from ryu.controller import dpset, ofp_event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER, \
     CONFIG_DISPATCHER, HANDSHAKE_DISPATCHER
 from ryu.lib import hub
-from ryu.ofproto import ofproto_v1_3, ofproto_v1_4
+from ryu.ofproto import ofproto_v1_0, ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 import ryu.lib.dpid as dpid_lib
 
 from ryuo.utils import config_logger, lock_class
@@ -23,7 +23,9 @@ Pyro4.config.HOST = RYU_HOST
 
 @lock_class([], Lock)
 class LocalController(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION,
+    OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION,
+                    ofproto_v1_2.OFP_VERSION,
+                    ofproto_v1_3.OFP_VERSION,
                     ofproto_v1_4.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):

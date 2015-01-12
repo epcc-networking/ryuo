@@ -1,10 +1,10 @@
-import subprocess
 from ryu.exception import OFPUnknownVersion
 from ryu.lib.mac import haddr_to_bin
 from ryu.ofproto import inet
 from ryu.ofproto import ether
 from ryu.lib.packet import packet
-from ryu.ofproto import ofproto_v1_3, ofproto_v1_4
+from ryu.ofproto import ofproto_v1_0, ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
+from ryu.ofproto import ofproto_v1_3_parser
 import threading
 
 from ryuo.utils import *
@@ -112,19 +112,24 @@ class OfCtl(object):
                               dst_mac=dst_mac, idle_timeout=idle_timeout,
                               dec_ttl=dec_ttl, eth_type=ether.ETH_TYPE_IPV6)
 
-    def set_sw_config_for_ttl(self):
-        packet_in_mask = (1 << self.dp.ofproto.OFPR_ACTION |
-                          1 << self.dp.ofproto.OFPR_INVALID_TTL)
-        port_status_mask = (1 << self.dp.ofproto.OFPPR_ADD |
-                            1 << self.dp.ofproto.OFPPR_DELETE |
-                            1 << self.dp.ofproto.OFPPR_MODIFY)
-        flow_removed_mask = (1 << self.dp.ofproto.OFPRR_IDLE_TIMEOUT |
-                             1 << self.dp.ofproto.OFPRR_HARD_TIMEOUT |
-                             1 << self.dp.ofproto.OFPRR_DELETE)
-        m = self.dp.ofproto_parser.OFPSetAsync(
+    def set_sw_config_for_ttl_restrict(self, ofp=ofproto_v1_3,
+                                       ofp_parser=ofproto_v1_3_parser):
+
+        packet_in_mask = (1 << ofp.OFPR_ACTION |
+                          1 << ofp.OFPR_INVALID_TTL)
+        port_status_mask = (1 << ofp.OFPPR_ADD |
+                            1 << ofp.OFPPR_DELETE |
+                            1 << ofp.OFPPR_MODIFY)
+        flow_removed_mask = (1 << ofp.OFPRR_IDLE_TIMEOUT |
+                             1 << ofp.OFPRR_HARD_TIMEOUT |
+                             1 << ofp.OFPRR_DELETE)
+        m = ofp_parser.OFPSetAsync(
             self.dp, [packet_in_mask, 0], [port_status_mask, 0],
             [flow_removed_mask, 0])
         self.dp.send_msg(m)
+
+    def set_sw_config_for_ttl(self):
+        return self.set_sw_config_for_ttl_restrict(self.ofp, self.ofp_parser)
 
     def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
@@ -298,14 +303,26 @@ class OfCtl(object):
         self.dp.send_msg(req)
 
 
+@OfCtl.register_of_version(ofproto_v1_0.OFP_VERSION)
+class OfCtl_v1_0(OfCtl):
+    def __init__(self, dp, logger):
+        super(OfCtl_v1_0, self).__init__(dp, logger)
+
+
+@OfCtl.register_of_version(ofproto_v1_2.OFP_VERSION)
+class OfCtl_v1_2(OfCtl_v1_0):
+    def __init__(self, dp, logger):
+        super(OfCtl_v1_2, self).__init__(dp, logger)
+
+
 @OfCtl.register_of_version(ofproto_v1_3.OFP_VERSION)
-class OfCtl_v1_3(OfCtl):
+class OfCtl_v1_3(OfCtl_v1_2):
     def __init__(self, dp, logger):
         super(OfCtl_v1_3, self).__init__(dp, logger)
 
 
 @OfCtl.register_of_version(ofproto_v1_4.OFP_VERSION)
-class OfCtl_v1_4(OfCtl):
+class OfCtl_v1_4(OfCtl_v1_3):
     def __init__(self, dp, logger):
         super(OfCtl_v1_4, self).__init__(dp, logger)
 
@@ -316,10 +333,10 @@ class OfCtl_v1_4(OfCtl):
         return msg.match.get('in_port', self.ofp.OFPP_ANY)
 
     def set_sw_config_for_ttl(self):
-        super(OfCtl_v1_4, self).set_sw_config_for_ttl()
+        super(OfCtl_v1_4, self).set_sw_config_for_ttl_restrict()
         # properties = [
         # self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
+        # self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
         #         (1 << self.ofp.OFPR_TABLE_MISS |
         #          1 << self.ofp.OFPR_APPLY_ACTION |
         #          1 << self.ofp.OFPR_INVALID_TTL |

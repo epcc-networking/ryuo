@@ -5,7 +5,6 @@ from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
 from ryu.lib.mac import DONTCARE_STR
 from ryu.lib.packet import lldp, packet
-from ryu.ofproto import ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 from ryu.ofproto.ether import ETH_TYPE_LLDP
 from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
 
@@ -17,10 +16,6 @@ from ryuo.topology.app import TopologyApp
 
 
 class TopologyLocal(LocalController):
-    OFP_VERSIONS = [ofproto_v1_2.OFP_VERSION,
-                    ofproto_v1_3.OFP_VERSION,
-                    ofproto_v1_4.OFP_VERSION]
-
     _EVENTS = {event.EventPortAdd,
                event.EventPortDelete,
                event.EventPortModify,
@@ -211,13 +206,7 @@ class TopologyLocal(LocalController):
         except LLDPPacket.LLDPUnknownFormat as e:
             self._logger.debug('LLDPUnknownFormat %s', e)
             return
-        dst_port_no = None
-        if ofp.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
-            dst_port_no = msg.match['in_port']
-        else:
-            self._logger.error(
-                'Cannot accept LLDP, unsupported OF version %x.',
-                ofp.OFP_VERSION)
+        dst_port_no = self.ofctl.get_packet_in_inport(msg)
         dst = self._get_port(dst_port_no)
         self._logger.debug('LLDP from %d.%d -> %d',
                            src_dpid,
