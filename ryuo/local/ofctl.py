@@ -11,9 +11,6 @@ from ryuo.utils import *
 from ryuo.constants import *
 
 
-UINT32_MAX = 0xffffffff
-
-
 class OfCtl(object):
     _OF_VERSIONS = {}
     lock = threading.Lock()
@@ -64,17 +61,37 @@ class OfCtl(object):
     def get_packet_in_inport(self, msg):
         pass
 
+    def update_routing_flow(self, cookie, priority, out_port, dl_vlan=None,
+                            nw_src=None, src_mask=32, nw_dst=None, dst_mask=32,
+                            src_mac=None, dst_mac=None, idle_timeout=0,
+                            dec_ttl=False, eth_type=ether.ETH_TYPE_IP,
+                            in_port=None, out_group=None):
+        self._mod_routing_flow(self.ofp.OFPFC_MODIFY, cookie, priority,
+                               out_port, dl_vlan, nw_src, src_mask, nw_dst,
+                               dst_mask, src_mac, dst_mac, idle_timeout,
+                               dec_ttl, eth_type, in_port, out_group)
+
     def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
                          eth_type=ether.ETH_TYPE_IP, in_port=None,
                          out_group=None):
+        self._mod_routing_flow(self.ofp.OFPFC_ADD, cookie, priority, out_port,
+                               dl_vlan, nw_src, src_mask, nw_dst, dst_mask,
+                               src_mac, dst_mac, idle_timeout, dec_ttl,
+                               eth_type, in_port, out_group)
+
+    def _mod_routing_flow(self, command, cookie, priority, out_port, dl_vlan=0,
+                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
+                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
+                          eth_type=ether.ETH_TYPE_IP, in_port=None,
+                          out_group=None):
         pass
 
-    def set_routing_flow_v6(self, cookie, priority, outport, dl_vlan=0,
-                            nw_src=0, src_mask=128, nw_dst=0, dst_mask=128,
-                            src_mac=0, dst_mac=0, idle_timeout=0,
-                            dec_ttl=False):
+    def set_routing_flow_v6(self, cookie, priority, outport, dl_vlan=None,
+                            nw_src=None, src_mask=128, nw_dst=None,
+                            dst_mask=128, src_mac=None, dst_mac=None,
+                            idle_timeout=0, dec_ttl=False):
         self.set_routing_flow(cookie, priority, outport, dl_vlan=dl_vlan,
                               nw_src=nw_src, src_mask=src_mask, nw_dst=nw_dst,
                               dst_mask=dst_mask, src_mac=src_mac,
@@ -90,6 +107,23 @@ class OfCtl(object):
                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
                  dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
                  in_port=None):
+        self._mod_flow(self.ofp.OFPFC_ADD, cookie, priority, eth_type, eth_dst,
+                       dl_vlan, nw_src, src_mask, nw_dst, dst_mask, nw_proto,
+                       idle_timeout, actions, in_port)
+
+    def update_flow(self, cookie, priority, eth_type=None, eth_dst=None,
+                    dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                    dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                    in_port=None):
+        self._mod_flow(self.ofp.OFPFC_MODIFY, cookie, priority, eth_type,
+                       eth_dst,
+                       dl_vlan, nw_src, src_mask, nw_dst, dst_mask, nw_proto,
+                       idle_timeout, actions, in_port)
+
+    def _mod_flow(self, command, cookie, priority, eth_type=None, eth_dst=None,
+                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                  dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                  in_port=None):
         pass
 
     def set_packet_in_flow(self, cookie, priority, eth_type=0, eth_dst=0,
@@ -213,11 +247,11 @@ class OfCtl_v1_0(OfCtl):
     def __init__(self, dp, logger):
         super(OfCtl_v1_0, self).__init__(dp, logger)
 
-    def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
-                         nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
-                         src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
-                         eth_type=ether.ETH_TYPE_IP, in_port=None,
-                         out_group=None):
+    def _mod_routing_flow(self, command, cookie, priority, out_port, dl_vlan=0,
+                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
+                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
+                          eth_type=ether.ETH_TYPE_IP, in_port=None,
+                          out_group=None):
         ofp_parser = self.dp.ofproto_parser
 
         actions = []
@@ -237,22 +271,22 @@ class OfCtl_v1_0(OfCtl):
             self.logger.warning('Group is not supported in OFP: %d',
                                 self.ofp.OFP_VERSION)
 
-        self.set_flow(cookie, priority, eth_type=eth_type, dl_vlan=dl_vlan,
-                      nw_src=nw_src, src_mask=src_mask,
-                      nw_dst=nw_dst, dst_mask=dst_mask,
-                      idle_timeout=idle_timeout, actions=actions,
-                      in_port=in_port)
+        self._mod_flow(command, cookie, priority, eth_type=eth_type,
+                       dl_vlan=dl_vlan,
+                       nw_src=nw_src, src_mask=src_mask,
+                       nw_dst=nw_dst, dst_mask=dst_mask,
+                       idle_timeout=idle_timeout, actions=actions,
+                       in_port=in_port)
 
     def get_packet_in_inport(self, msg):
         return msg.in_port
 
-    def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
-                 dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
-                 dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
-                 in_port=None):
+    def _mod_flow(self, command, cookie, priority, eth_type=None, eth_dst=None,
+                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                  dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                  in_port=None):
         ofp = self.ofp
         ofp_parser = self.ofp_parser
-        cmd = ofp.OFPFC_ADD
 
         wildcards = ofp.OFPFW_ALL
         if in_port:
@@ -285,7 +319,7 @@ class OfCtl_v1_0(OfCtl):
                                     tp_dst=None, nw_src_mask=src_mask,
                                     nw_dst_mask=dst_mask)
         actions = actions or []
-        m = ofp_parser.OFPFlowMod(self.dp, match, cookie, cmd,
+        m = ofp_parser.OFPFlowMod(self.dp, match, cookie, command,
                                   idle_timeout=idle_timeout,
                                   priority=priority,
                                   actions=actions)
@@ -297,11 +331,11 @@ class OfCtl_v1_2(OfCtl_v1_0):
     def __init__(self, dp, logger):
         super(OfCtl_v1_2, self).__init__(dp, logger)
 
-    def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
-                         nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
-                         src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
-                         eth_type=ether.ETH_TYPE_IP, in_port=None,
-                         out_group=None):
+    def _mod_routing_flow(self, command, cookie, priority, out_port, dl_vlan=0,
+                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
+                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
+                          eth_type=ether.ETH_TYPE_IP, in_port=None,
+                          out_group=None):
         ofp_parser = self.dp.ofproto_parser
 
         actions = []
@@ -316,11 +350,12 @@ class OfCtl_v1_2(OfCtl_v1_0):
         if out_group is not None:
             actions.append(ofp_parser.OFPActionGroup(group_id=out_group))
 
-        self.set_flow(cookie, priority, eth_type=eth_type, dl_vlan=dl_vlan,
-                      nw_src=nw_src, src_mask=src_mask,
-                      nw_dst=nw_dst, dst_mask=dst_mask,
-                      idle_timeout=idle_timeout, actions=actions,
-                      in_port=in_port)
+        self._mod_flow(command, cookie, priority, eth_type=eth_type,
+                       dl_vlan=dl_vlan,
+                       nw_src=nw_src, src_mask=src_mask,
+                       nw_dst=nw_dst, dst_mask=dst_mask,
+                       idle_timeout=idle_timeout, actions=actions,
+                       in_port=in_port)
 
     def get_packet_in_inport(self, msg):
         in_port = self.dp.ofproto.OFPP_ANY
@@ -330,13 +365,12 @@ class OfCtl_v1_2(OfCtl_v1_0):
                 break
         return in_port
 
-    def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
-                 dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
-                 dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
-                 in_port=None):
+    def _mod_flow(self, command, cookie, priority, eth_type=None, eth_dst=None,
+                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                  dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                  in_port=None):
         ofp = self.dp.ofproto
         ofp_parser = self.dp.ofproto_parser
-        cmd = ofp.OFPFC_ADD
 
         # Match
         match = ofp_parser.OFPMatch()
@@ -369,8 +403,8 @@ class OfCtl_v1_2(OfCtl_v1_0):
         actions = actions or []
         inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
                                                  actions)]
-        m = ofp_parser.OFPFlowMod(self.dp, cookie, 0, 0, cmd, idle_timeout,
-                                  0, priority, UINT32_MAX, ofp.OFPP_ANY,
+        m = ofp_parser.OFPFlowMod(self.dp, cookie, 0, 0, command, idle_timeout,
+                                  0, priority, ofp.OFP_NO_BUFFER, ofp.OFPP_ANY,
                                   ofp.OFPG_ANY, 0, match, inst)
         self.dp.send_msg(m)
 
@@ -482,29 +516,28 @@ class OfCtl_v1_4(OfCtl_v1_3):
         # 1 << self.ofp.OFPPR_DELETE |
         # 1 << self.ofp.OFPPR_MODIFY)
         # if flow_removed_mask is None:
-        #     flow_removed_mask = (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
-        #                          1 << self.ofp.OFPRR_HARD_TIMEOUT |
-        #                          1 << self.ofp.OFPRR_DELETE |
-        #                          1 << self.ofp.OFPRR_GROUP_DELETE |
-        #                          1 << self.ofp.OFPRR_METER_DELETE |
-        #                          1 << self.ofp.OFPRR_EVICTION)
+        # flow_removed_mask = (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
+        # 1 << self.ofp.OFPRR_HARD_TIMEOUT |
+        # 1 << self.ofp.OFPRR_DELETE |
+        # 1 << self.ofp.OFPRR_GROUP_DELETE |
+        # 1 << self.ofp.OFPRR_METER_DELETE |
+        # 1 << self.ofp.OFPRR_EVICTION)
         # properties = [
         # self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_PACKET_IN_MASTER, mask=packet_in_mask),
-        #     self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=port_status_mask),
+        # self.ofp.OFPACPT_PACKET_IN_MASTER, mask=packet_in_mask),
+        # self.ofp_parser.OFPAsyncConfigPropReasons(
+        # self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=port_status_mask),
         #     self.ofp_parser.OFPAsyncConfigPropReasons(
         # self.ofp.OFPACPT_FLOW_REMOVED_MASTER, mask=flow_removed_mask)]
         # req = self.ofp_parser.OFPSetAsync(self.dp, properties)
         # self.dp.send_msg(req)
 
-    def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
-                 dl_vlan=None,
-                 nw_src=None, src_mask=32, nw_dst=None, dst_mask=32,
-                 nw_proto=None, idle_timeout=0, actions=None, in_port=None):
+    def _mod_flow(self, command, cookie, priority, eth_type=None, eth_dst=None,
+                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                  dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                  in_port=None):
         ofp = self.ofp
         ofp_parser = self.ofp_parser
-        cmd = ofp.OFPFC_ADD
 
         # Match
         match_params = {}
@@ -536,7 +569,7 @@ class OfCtl_v1_4(OfCtl_v1_3):
                                   cookie=cookie,
                                   cookie_mask=0,
                                   table_id=0,
-                                  command=cmd,
+                                  command=command,
                                   idle_timeout=idle_timeout,
                                   hard_timeout=0,
                                   priority=priority,

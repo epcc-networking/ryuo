@@ -7,7 +7,7 @@ from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
 from ryu.lib.packet.icmp import ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
     ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED, \
     ICMP_TTL_EXPIRED_CODE, ICMP_ECHO_REQUEST, ICMP_HOST_UNREACH_CODE
-from ryu.ofproto import ether, ofproto_v1_2
+from ryu.ofproto import ether, ofproto_v1_2, ofproto_v1_0
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
 
@@ -162,6 +162,8 @@ class KFRoutingLocal(LocalApp):
             self.ports[port.port_no].down()
         else:
             self.ports[port.port_no].up()
+        if self.dp.ofproto.OFP_VERSION == ofproto_v1_0.OFP_VERSION:
+            self._update_routes()
 
     @set_ev_cls(EventLinkAdd)
     def _on_link_added(self, ev):
@@ -231,6 +233,9 @@ class KFRoutingLocal(LocalApp):
                                         dst_mask=route.netmask,
                                         dec_ttl=True,
                                         in_port=route.in_port)
+
+    def _update_routes(self):
+        pass
 
     def _switch_enter(self, dp):
         super(KFRoutingLocal, self)._switch_enter(dp)
