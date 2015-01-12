@@ -44,15 +44,9 @@ class OfCtl(object):
             raise OFPUnknownVersion(version=of_version)
 
     def async_config_to_str(self, msg):
-        return ('packet_in_mask=0x%08x:0x%08x '
-                'port_status_mask=0x%08x:0x%08x '
-                'flow_removed_mask=0x%08x:0x%08x' % (
-                    msg.packet_in_mask[0],
-                    msg.packet_in_mask[1],
-                    msg.port_status_mask[0],
-                    msg.port_status_mask[1],
-                    msg.flow_removed_mask[0],
-                    msg.flow_removed_mask[1]))
+        self.logger.warning('Async Config not supported by OFP: %d',
+                            self.ofp.OFP_VERSION)
+        return None
 
     def send_packet_out(self, in_port, output, data, data_str=None):
         actions = [self.dp.ofproto_parser.OFPActionOutput(output, 0)]
@@ -114,31 +108,8 @@ class OfCtl(object):
 
     def set_async_config(self, packet_in_mask=None, port_status_mask=None,
                          flow_removed_mask=None):
-        return self.set_async_config_restrict(packet_in_mask=packet_in_mask,
-                                              port_status_mask=port_status_mask,
-                                              flow_removed_mask=flow_removed_mask,
-                                              ofp=self.ofp,
-                                              ofp_parser=self.ofp_parser)
-
-    def set_async_config_restrict(self, packet_in_mask=None,
-                                  port_status_mask=None,
-                                  flow_removed_mask=None, ofp=ofproto_v1_3,
-                                  ofp_parser=ofproto_v1_3_parser):
-        if packet_in_mask is None:
-            packet_in_mask = (1 << ofp.OFPR_ACTION |
-                              1 << ofp.OFPR_INVALID_TTL)
-        if port_status_mask is None:
-            port_status_mask = (1 << ofp.OFPPR_ADD |
-                                1 << ofp.OFPPR_DELETE |
-                                1 << ofp.OFPPR_MODIFY)
-        if flow_removed_mask is None:
-            flow_removed_mask = (1 << ofp.OFPRR_IDLE_TIMEOUT |
-                                 1 << ofp.OFPRR_HARD_TIMEOUT |
-                                 1 << ofp.OFPRR_DELETE)
-        m = ofp_parser.OFPSetAsync(
-            self.dp, [packet_in_mask, 0], [port_status_mask, 0],
-            [flow_removed_mask, 0])
-        self.dp.send_msg(m)
+        self.logger.warning('Set Async is not supported by OFP: %d',
+                            self.ofp.OFP_VERSION)
 
     def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
@@ -307,9 +278,10 @@ class OfCtl(object):
         self.send_packet_out(in_port, output, pkt.data, data_str=str(pkt))
         self.logger.debug('Sending ARP from %s to %s', src_ip, dst_ip)
 
-    def send_get_async_request(self):
-        req = self.ofp_parser.OFPGetAsyncRequest(self.dp)
-        self.dp.send_msg(req)
+    def get_async_config_request(self):
+        self.logger.warning(
+            'Get Async Config Request not supported by OFP: %d',
+            self.ofp.OFP_VERSION)
 
 
 @OfCtl.register_of_version(ofproto_v1_0.OFP_VERSION)
@@ -328,6 +300,50 @@ class OfCtl_v1_2(OfCtl_v1_0):
 class OfCtl_v1_3(OfCtl_v1_2):
     def __init__(self, dp, logger):
         super(OfCtl_v1_3, self).__init__(dp, logger)
+
+    def get_async_config_request(self):
+        req = self.ofp_parser.OFPGetAsyncRequest(self.dp)
+        self.dp.send_msg(req)
+
+    def set_async_config(self, packet_in_mask=None, port_status_mask=None,
+                         flow_removed_mask=None):
+        return self.set_async_config_restrict(
+            packet_in_mask=packet_in_mask,
+            port_status_mask=port_status_mask,
+            flow_removed_mask=flow_removed_mask,
+            ofp=self.ofp,
+            ofp_parser=self.ofp_parser)
+
+    def set_async_config_restrict(self, packet_in_mask=None,
+                                  port_status_mask=None,
+                                  flow_removed_mask=None, ofp=ofproto_v1_3,
+                                  ofp_parser=ofproto_v1_3_parser):
+        if packet_in_mask is None:
+            packet_in_mask = (1 << ofp.OFPR_ACTION |
+                              1 << ofp.OFPR_INVALID_TTL)
+        if port_status_mask is None:
+            port_status_mask = (1 << ofp.OFPPR_ADD |
+                                1 << ofp.OFPPR_DELETE |
+                                1 << ofp.OFPPR_MODIFY)
+        if flow_removed_mask is None:
+            flow_removed_mask = (1 << ofp.OFPRR_IDLE_TIMEOUT |
+                                 1 << ofp.OFPRR_HARD_TIMEOUT |
+                                 1 << ofp.OFPRR_DELETE)
+        m = ofp_parser.OFPSetAsync(
+            self.dp, [packet_in_mask, 0], [port_status_mask, 0],
+            [flow_removed_mask, 0])
+        self.dp.send_msg(m)
+
+    def async_config_to_str(self, msg):
+        return ('packet_in_mask=0x%08x:0x%08x '
+                'port_status_mask=0x%08x:0x%08x '
+                'flow_removed_mask=0x%08x:0x%08x' % (
+                    msg.packet_in_mask[0],
+                    msg.packet_in_mask[1],
+                    msg.port_status_mask[0],
+                    msg.port_status_mask[1],
+                    msg.flow_removed_mask[0],
+                    msg.flow_removed_mask[1]))
 
 
 @OfCtl.register_of_version(ofproto_v1_4.OFP_VERSION)
@@ -350,10 +366,10 @@ class OfCtl_v1_4(OfCtl_v1_3):
             flow_removed_mask=flow_removed_mask)
         # if packet_in_mask is None:
         # packet_in_mask = (1 << self.ofp.OFPR_TABLE_MISS |
-        #                       1 << self.ofp.OFPR_APPLY_ACTION |
-        #                       1 << self.ofp.OFPR_INVALID_TTL |
-        #                       1 << self.ofp.OFPR_ACTION_SET |
-        #                       1 << self.ofp.OFPR_GROUP |
+        # 1 << self.ofp.OFPR_APPLY_ACTION |
+        # 1 << self.ofp.OFPR_INVALID_TTL |
+        # 1 << self.ofp.OFPR_ACTION_SET |
+        # 1 << self.ofp.OFPR_GROUP |
         #                       1 << self.ofp.OFPR_PACKET_OUT)
         # if port_status_mask is None:
         #     port_status_mask = (1 << self.ofp.OFPPR_ADD |

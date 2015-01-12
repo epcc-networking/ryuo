@@ -202,7 +202,7 @@ class KFRoutingLocal(LocalController):
         priority, dummy = _get_priority(PRIORITY_NORMAL)
         self.ofctl.set_normal_flow(cookie, priority)
 
-        self.ofctl.send_get_async_request()
+        self.ofctl.get_async_config_request()
 
     def _install_routing_entry(self, route):
         priority, dummy = _get_priority(PRIORITY_TYPE_ROUTE, route=route)
