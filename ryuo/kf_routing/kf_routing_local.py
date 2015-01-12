@@ -7,7 +7,7 @@ from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
 from ryu.lib.packet.icmp import ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
     ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED, \
     ICMP_TTL_EXPIRED_CODE, ICMP_ECHO_REQUEST, ICMP_HOST_UNREACH_CODE
-from ryu.ofproto import ether
+from ryu.ofproto import ether, ofproto_v1_2
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
 
@@ -21,12 +21,12 @@ from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_L2_SWITCHING, \
     PORT_UP, ARP, PRIORITY_MAC_LEARNING
-from ryuo.local.local_controller import LocalController
+from ryuo.local.local_app import LocalApp
 from ryuo.config import ARP_EXPIRE_SECOND
 from ryuo.utils import nw_addr_aton, ipv4_apply_mask, expose
 
 
-class KFRoutingLocal(LocalController):
+class KFRoutingLocal(LocalApp):
     def __init__(self, *args, **kwargs):
         kwargs['ryuo_name'] = KFRoutingApp.__name__
         super(KFRoutingLocal, self).__init__(*args, **kwargs)
@@ -131,7 +131,8 @@ class KFRoutingLocal(LocalController):
         headers = dict((p.protocol_name, p)
                        for p in pkt.protocols if type(p) != str)
         ofproto = self.dp.ofproto
-        if msg.reason == ofproto.OFPR_INVALID_TTL:
+        if (ofproto.OFP_VERSION >= ofproto_v1_2.OFP_VERSION and
+                    msg.reason == ofproto.OFPR_INVALID_TTL):
             return self._packet_in_invalid_ttl(msg, headers)
         if ARP in headers:
             return self._packet_in_arp(msg, headers)
@@ -173,6 +174,8 @@ class KFRoutingLocal(LocalController):
         self.ports[dst_port_no].set_peer_mac(peer_mac)
 
     def _init_port(self, ofpport):
+        if ofpport.port_no > self.dp.ofproto.OFPP_MAX:
+            return
         self.ports[ofpport.port_no] = _Port(ofpport.port_no, ofpport.hw_addr,
                                             ofpport.name)
         priority, dummy = _get_priority(PRIORITY_ARP_HANDLING)
@@ -206,14 +209,28 @@ class KFRoutingLocal(LocalController):
 
     def _install_routing_entry(self, route):
         priority, dummy = _get_priority(PRIORITY_TYPE_ROUTE, route=route)
-        self.ofctl.set_routing_flow(0,
-                                    priority,
-                                    None,
-                                    nw_dst=route.dst_ip,
-                                    dst_mask=route.netmask,
-                                    dec_ttl=True,
-                                    in_port=route.in_port,
-                                    out_group=route.out_group)
+        if self.dp.ofproto.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
+            self.ofctl.set_routing_flow(0,
+                                        priority,
+                                        None,
+                                        nw_dst=route.dst_ip,
+                                        dst_mask=route.netmask,
+                                        dec_ttl=True,
+                                        in_port=route.in_port,
+                                        out_group=route.out_group)
+        else:
+            port = self.groups[route.out_group].output_ports[0]
+            src_mac = self.ports[port].mac
+            dst_mac = self.ports[port].peer_mac
+            self.ofctl.set_routing_flow(0,
+                                        priority,
+                                        port,
+                                        src_mac=src_mac,
+                                        dst_mac=dst_mac,
+                                        nw_dst=route.dst_ip,
+                                        dst_mask=route.netmask,
+                                        dec_ttl=True,
+                                        in_port=route.in_port)
 
     def _switch_enter(self, dp):
         super(KFRoutingLocal, self)._switch_enter(dp)
@@ -329,9 +346,10 @@ class KFRoutingLocal(LocalController):
         # headers,
         # ICMP_DEST_UNREACH,
         # ICMP_PORT_UNREACH_CODE,
-        #                      msg_data=msg.data)
-        #self._logger.info('Receive TCP/UDP from %s, sending icmp unreachable',
-        #                  headers[IPV4].src)
+        # msg_data=msg.data)
+        # self._logger.info('Receive TCP/UDP from %s, sending icmp
+        # unreachable',
+        # headers[IPV4].src)
 
     def _packet_in_to_node(self, msg, headers):
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:
@@ -576,21 +594,26 @@ class _Group(object):
         return not self.__eq__(other)
 
     def install(self):
-        self._set(self.group_table.ofctl.dp.ofproto.OFPGC_ADD)
+        output_ports, src_macs, dst_macs = self._get_ports_and_macs()
+        ofctl = self.group_table.ofctl
+        ofctl.add_failover_group(self.id, self.watch_ports, output_ports,
+                                 src_macs, dst_macs)
 
     def update(self):
-        self._set(self.group_table.ofctl.dp.ofproto.OFPGC_MODIFY)
-
-    def _set(self, command):
+        output_ports, src_macs, dst_macs = self._get_ports_and_macs()
         ofctl = self.group_table.ofctl
+        ofctl.modify_failover_group(self.id, self.watch_ports, output_ports,
+                                    src_macs, dst_macs)
+
+    def _get_ports_and_macs(self):
         ports = self.group_table.ports
+        ofctl = self.group_table.ofctl
         output_ports = [
             port_no if port_no != self.inport else
             ofctl.dp.ofproto.OFPP_IN_PORT for port_no in self.output_ports]
         src_macs = [ports[port_no].mac for port_no in self.output_ports]
         dst_macs = [ports[port_no].peer_mac for port_no in self.output_ports]
-        ofctl.set_failover_group(self.id, self.watch_ports, output_ports,
-                                 src_macs, dst_macs, command)
+        return output_ports, src_macs, dst_macs
 
 
 class _GroupTable(dict):

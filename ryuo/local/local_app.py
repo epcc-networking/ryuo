@@ -22,14 +22,14 @@ Pyro4.config.HOST = RYU_HOST
 
 
 @lock_class([], Lock)
-class LocalController(app_manager.RyuApp):
+class LocalApp(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION,
                     ofproto_v1_2.OFP_VERSION,
                     ofproto_v1_3.OFP_VERSION,
                     ofproto_v1_4.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
-        super(LocalController, self).__init__(*args, **kwargs)
+        super(LocalApp, self).__init__(*args, **kwargs)
         self._setup_logger()
         self._rpc_thread = None
         self.uri = None

@@ -10,12 +10,12 @@ from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
 
 from ryuo.constants import ETHERNET
 from ryuo.topology import event
-from ryuo.local.local_controller import LocalController
+from ryuo.local.local_app import LocalApp
 from ryuo.topology.common import PortData, Port
 from ryuo.topology.app import TopologyApp
 
 
-class TopologyLocal(LocalController):
+class TopologyLocal(LocalApp):
     _EVENTS = {event.EventPortAdd,
                event.EventPortDelete,
                event.EventPortModify,

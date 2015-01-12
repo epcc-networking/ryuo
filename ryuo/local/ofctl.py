@@ -46,12 +46,10 @@ class OfCtl(object):
     def async_config_to_str(self, msg):
         self.logger.warning('Async Config not supported by OFP: %d',
                             self.ofp.OFP_VERSION)
-        return None
 
     def send_packet_out(self, in_port, output, data, data_str=None):
-        actions = [self.dp.ofproto_parser.OFPActionOutput(output, 0)]
-        self.dp.send_packet_out(buffer_id=UINT32_MAX, in_port=in_port,
-                                actions=actions, data=data)
+        actions = [self.dp.ofproto_parser.OFPActionOutput(output)]
+        self.dp.send_packet_out(in_port=in_port, actions=actions, data=data)
         # TODO: Packet library convert to string
         # if data_str is None:
         # data_str = str(packet.Packet(data))
@@ -64,37 +62,14 @@ class OfCtl(object):
         self.set_flow(cookie, priority, actions=actions)
 
     def get_packet_in_inport(self, msg):
-        in_port = self.dp.ofproto.OFPP_ANY
-        for match_field in msg.match.fields:
-            if match_field.header == self.dp.ofproto.OXM_OF_IN_PORT:
-                in_port = match_field.value
-                break
-        return in_port
+        pass
 
     def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
                          eth_type=ether.ETH_TYPE_IP, in_port=None,
                          out_group=None):
-        ofp_parser = self.dp.ofproto_parser
-
-        actions = []
-        if dec_ttl:
-            actions.append(ofp_parser.OFPActionDecNwTtl())
-        if src_mac:
-            actions.append(ofp_parser.OFPActionSetField(eth_src=src_mac))
-        if dst_mac:
-            actions.append(ofp_parser.OFPActionSetField(eth_dst=dst_mac))
-        if out_port is not None:
-            actions.append(ofp_parser.OFPActionOutput(out_port, 0))
-        if out_group is not None:
-            actions.append(ofp_parser.OFPActionGroup(group_id=out_group))
-
-        self.set_flow(cookie, priority, eth_type=eth_type, dl_vlan=dl_vlan,
-                      nw_src=nw_src, src_mask=src_mask,
-                      nw_dst=nw_dst, dst_mask=dst_mask,
-                      idle_timeout=idle_timeout, actions=actions,
-                      in_port=in_port)
+        pass
 
     def set_routing_flow_v6(self, cookie, priority, outport, dl_vlan=0,
                             nw_src=0, src_mask=128, nw_dst=0, dst_mask=128,
@@ -115,52 +90,13 @@ class OfCtl(object):
                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
                  dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
                  in_port=None):
-        ofp = self.dp.ofproto
-        ofp_parser = self.dp.ofproto_parser
-        cmd = ofp.OFPFC_ADD
-
-        # Match
-        match = ofp_parser.OFPMatch()
-        if eth_type:
-            match.set_dl_type(eth_type)
-        if eth_dst:
-            if type(eth_dst) == str:
-                eth_dst = haddr_to_bin(eth_dst)
-            match.set_dl_dst(eth_dst)
-        if dl_vlan:
-            match.set_vlan_vid(dl_vlan)
-        if in_port:
-            match.set_in_port(in_port)
-        if nw_proto:
-            match.set_ip_proto(nw_proto)
-        # TODO: Handle ipv6 address
-        if nw_src:
-            match.set_ipv4_src_masked(ipv4_text_to_int(nw_src),
-                                      mask_ntob(src_mask))
-        if nw_dst:
-            match.set_ipv4_dst_masked(ipv4_text_to_int(nw_dst),
-                                      mask_ntob(dst_mask))
-        if nw_proto:
-            if eth_type == ether.ETH_TYPE_IP:
-                match.set_ip_proto(nw_proto)
-            elif eth_type == ether.ETH_TYPE_ARP:
-                match.set_arp_opcode(nw_proto)
-
-        # Instructions
-        actions = actions or []
-        inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
-                                                 actions)]
-        m = ofp_parser.OFPFlowMod(self.dp, cookie, 0, 0, cmd, idle_timeout,
-                                  0, priority, UINT32_MAX, ofp.OFPP_ANY,
-                                  ofp.OFPG_ANY, 0, match, inst)
-        self.dp.send_msg(m)
+        pass
 
     def set_packet_in_flow(self, cookie, priority, eth_type=0, eth_dst=0,
                            dl_vlan=0, dst_ip=0, dst_mask=32, nw_proto=0,
                            idle_timeout=0, in_port=None):
-        miss_send_len = UINT16_MAX
         actions = [self.dp.ofproto_parser.OFPActionOutput(
-            self.dp.ofproto.OFPP_CONTROLLER, miss_send_len)]
+            self.dp.ofproto.OFPP_CONTROLLER)]
         self.set_flow(cookie, priority, eth_type=eth_type, eth_dst=eth_dst,
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
                       nw_proto=nw_proto, actions=actions,
@@ -168,30 +104,18 @@ class OfCtl(object):
 
     def set_failover_group(self, group_id, watch_ports, out_ports, src_macs,
                            dst_macs, command):
-        ofp_parser = self.dp.ofproto_parser
-        actions = [[ofp_parser.OFPActionSetField(eth_src=src_macs[i]),
-                    ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
-                    ofp_parser.OFPActionOutput(port)]
-                   for i, port in enumerate(out_ports)]
-        buckets = [ofp_parser.OFPBucket(0, port, self.dp.ofproto.OFPG_ANY,
-                                        actions[i]) for
-                   i, port in enumerate(watch_ports)]
-        req = ofp_parser.OFPGroupMod(self.dp,
-                                     command,
-                                     self.dp.ofproto.OFPGT_FF,
-                                     group_id,
-                                     buckets)
-        self.dp.send_msg(req)
+        self.logger.warning('FF Group not supported by OFP: %d',
+                            self.ofp.OFP_VERSION)
 
     def modify_failover_group(self, group_id, watch_ports, out_ports, src_macs,
                               dst_macs):
-        self.set_failover_group(group_id, watch_ports, out_ports, src_macs,
-                                dst_macs, self.dp.ofproto.OFPGC_MODIFY)
+        self.logger.warning('FF Group not supported by OFP: %d',
+                            self.ofp.OFP_VERSION)
 
     def add_failover_group(self, group_id, watch_ports, out_ports, src_macs,
                            dst_macs):
-        self.set_failover_group(group_id, watch_ports, out_ports, src_macs,
-                                dst_macs, self.dp.ofproto.OFPGC_ADD)
+        self.logger.warning('FF Group not supported by OFP: %d',
+                            self.ofp.OFP_VERSION)
 
     def send_icmp(self, in_port, eth_src, eth_dst, icmp_type, icmp_code,
                   ip_dst, icmp_data=None, msg_data=None, src_ip=None,
@@ -289,11 +213,193 @@ class OfCtl_v1_0(OfCtl):
     def __init__(self, dp, logger):
         super(OfCtl_v1_0, self).__init__(dp, logger)
 
+    def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
+                         nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
+                         src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
+                         eth_type=ether.ETH_TYPE_IP, in_port=None,
+                         out_group=None):
+        ofp_parser = self.dp.ofproto_parser
+
+        actions = []
+        if dec_ttl:
+            actions.append(ofp_parser.NXActionDecTtl())
+        if src_mac:
+            if type(src_mac) == str:
+                src_mac = haddr_to_bin(src_mac)
+            actions.append(ofp_parser.OFPActionSetDlSrc(src_mac))
+        if dst_mac:
+            if type(dst_mac) == str:
+                dst_mac = haddr_to_bin(dst_mac)
+            actions.append(ofp_parser.OFPActionSetDlDst(dst_mac))
+        if out_port is not None:
+            actions.append(ofp_parser.OFPActionOutput(out_port))
+        if out_group is not None:
+            self.logger.warning('Group is not supported in OFP: %d',
+                                self.ofp.OFP_VERSION)
+
+        self.set_flow(cookie, priority, eth_type=eth_type, dl_vlan=dl_vlan,
+                      nw_src=nw_src, src_mask=src_mask,
+                      nw_dst=nw_dst, dst_mask=dst_mask,
+                      idle_timeout=idle_timeout, actions=actions,
+                      in_port=in_port)
+
+    def get_packet_in_inport(self, msg):
+        return msg.in_port
+
+    def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
+                 dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                 dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                 in_port=None):
+        ofp = self.ofp
+        ofp_parser = self.ofp_parser
+        cmd = ofp.OFPFC_ADD
+
+        wildcards = ofp.OFPFW_ALL
+        if in_port:
+            wildcards &= ~ofp.OFPFW_IN_PORT
+        if eth_type:
+            wildcards &= ~ofp.OFPFW_DL_TYPE
+        if eth_dst:
+            wildcards &= ~ofp.OFPFW_DL_DST
+            if type(eth_dst) == str:
+                eth_dst = haddr_to_bin(eth_dst)
+        if dl_vlan:
+            wildcards &= ~ofp.OFPFW_DL_VLAN
+        if nw_src:
+            v = (32 - src_mask) << ofp.OFPFW_NW_SRC_SHIFT | \
+                ~ofp.OFPFW_NW_SRC_MASK
+            wildcards &= v
+            nw_src = ipv4_text_to_int(nw_src)
+        if nw_dst:
+            v = (32 - dst_mask) << ofp.OFPFW_NW_DST_SHIFT | \
+                ~ofp.OFPFW_NW_DST_MASK
+            wildcards &= v
+            nw_dst = ipv4_text_to_int(nw_dst)
+        if nw_proto:
+            wildcards &= ~ofp.OFPFW_NW_PROTO
+        match = ofp_parser.OFPMatch(wildcards, in_port=in_port, dl_src=None,
+                                    dl_dst=eth_dst, dl_vlan=dl_vlan,
+                                    dl_vlan_pcp=None, dl_type=eth_type,
+                                    nw_tos=None, nw_proto=nw_proto,
+                                    nw_src=nw_src, nw_dst=nw_dst, tp_src=None,
+                                    tp_dst=None, nw_src_mask=src_mask,
+                                    nw_dst_mask=dst_mask)
+        actions = actions or []
+        m = ofp_parser.OFPFlowMod(self.dp, match, cookie, cmd,
+                                  idle_timeout=idle_timeout,
+                                  priority=priority,
+                                  actions=actions)
+        self.dp.send_msg(m)
+
 
 @OfCtl.register_of_version(ofproto_v1_2.OFP_VERSION)
 class OfCtl_v1_2(OfCtl_v1_0):
     def __init__(self, dp, logger):
         super(OfCtl_v1_2, self).__init__(dp, logger)
+
+    def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
+                         nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
+                         src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
+                         eth_type=ether.ETH_TYPE_IP, in_port=None,
+                         out_group=None):
+        ofp_parser = self.dp.ofproto_parser
+
+        actions = []
+        if dec_ttl:
+            actions.append(ofp_parser.OFPActionDecNwTtl())
+        if src_mac:
+            actions.append(ofp_parser.OFPActionSetField(eth_src=src_mac))
+        if dst_mac:
+            actions.append(ofp_parser.OFPActionSetField(eth_dst=dst_mac))
+        if out_port is not None:
+            actions.append(ofp_parser.OFPActionOutput(out_port))
+        if out_group is not None:
+            actions.append(ofp_parser.OFPActionGroup(group_id=out_group))
+
+        self.set_flow(cookie, priority, eth_type=eth_type, dl_vlan=dl_vlan,
+                      nw_src=nw_src, src_mask=src_mask,
+                      nw_dst=nw_dst, dst_mask=dst_mask,
+                      idle_timeout=idle_timeout, actions=actions,
+                      in_port=in_port)
+
+    def get_packet_in_inport(self, msg):
+        in_port = self.dp.ofproto.OFPP_ANY
+        for match_field in msg.match.fields:
+            if match_field.header == self.dp.ofproto.OXM_OF_IN_PORT:
+                in_port = match_field.value
+                break
+        return in_port
+
+    def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
+                 dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
+                 dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
+                 in_port=None):
+        ofp = self.dp.ofproto
+        ofp_parser = self.dp.ofproto_parser
+        cmd = ofp.OFPFC_ADD
+
+        # Match
+        match = ofp_parser.OFPMatch()
+        if eth_type:
+            match.set_dl_type(eth_type)
+        if eth_dst:
+            if type(eth_dst) == str:
+                eth_dst = haddr_to_bin(eth_dst)
+            match.set_dl_dst(eth_dst)
+        if dl_vlan:
+            match.set_vlan_vid(dl_vlan)
+        if in_port:
+            match.set_in_port(in_port)
+        if nw_proto:
+            match.set_ip_proto(nw_proto)
+        # TODO: Handle ipv6 address
+        if nw_src:
+            match.set_ipv4_src_masked(ipv4_text_to_int(nw_src),
+                                      mask_ntob(src_mask))
+        if nw_dst:
+            match.set_ipv4_dst_masked(ipv4_text_to_int(nw_dst),
+                                      mask_ntob(dst_mask))
+        if nw_proto:
+            if eth_type == ether.ETH_TYPE_IP:
+                match.set_ip_proto(nw_proto)
+            elif eth_type == ether.ETH_TYPE_ARP:
+                match.set_arp_opcode(nw_proto)
+
+        # Instructions
+        actions = actions or []
+        inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                                 actions)]
+        m = ofp_parser.OFPFlowMod(self.dp, cookie, 0, 0, cmd, idle_timeout,
+                                  0, priority, UINT32_MAX, ofp.OFPP_ANY,
+                                  ofp.OFPG_ANY, 0, match, inst)
+        self.dp.send_msg(m)
+
+    def set_failover_group(self, group_id, watch_ports, out_ports, src_macs,
+                           dst_macs, command):
+        ofp_parser = self.dp.ofproto_parser
+        actions = [[ofp_parser.OFPActionSetField(eth_src=src_macs[i]),
+                    ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
+                    ofp_parser.OFPActionOutput(port)]
+                   for i, port in enumerate(out_ports)]
+        buckets = [ofp_parser.OFPBucket(0, port, self.dp.ofproto.OFPG_ANY,
+                                        actions[i]) for
+                   i, port in enumerate(watch_ports)]
+        req = ofp_parser.OFPGroupMod(self.dp,
+                                     command,
+                                     self.dp.ofproto.OFPGT_FF,
+                                     group_id,
+                                     buckets)
+        self.dp.send_msg(req)
+
+    def modify_failover_group(self, group_id, watch_ports, out_ports, src_macs,
+                              dst_macs):
+        self.set_failover_group(group_id, watch_ports, out_ports, src_macs,
+                                dst_macs, self.dp.ofproto.OFPGC_MODIFY)
+
+    def add_failover_group(self, group_id, watch_ports, out_ports, src_macs,
+                           dst_macs):
+        self.set_failover_group(group_id, watch_ports, out_ports, src_macs,
+                                dst_macs, self.dp.ofproto.OFPGC_ADD)
 
 
 @OfCtl.register_of_version(ofproto_v1_3.OFP_VERSION)
@@ -370,11 +476,11 @@ class OfCtl_v1_4(OfCtl_v1_3):
         # 1 << self.ofp.OFPR_INVALID_TTL |
         # 1 << self.ofp.OFPR_ACTION_SET |
         # 1 << self.ofp.OFPR_GROUP |
-        #                       1 << self.ofp.OFPR_PACKET_OUT)
+        # 1 << self.ofp.OFPR_PACKET_OUT)
         # if port_status_mask is None:
-        #     port_status_mask = (1 << self.ofp.OFPPR_ADD |
-        #                         1 << self.ofp.OFPPR_DELETE |
-        #                         1 << self.ofp.OFPPR_MODIFY)
+        # port_status_mask = (1 << self.ofp.OFPPR_ADD |
+        # 1 << self.ofp.OFPPR_DELETE |
+        # 1 << self.ofp.OFPPR_MODIFY)
         # if flow_removed_mask is None:
         #     flow_removed_mask = (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
         #                          1 << self.ofp.OFPRR_HARD_TIMEOUT |
