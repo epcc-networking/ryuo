@@ -192,7 +192,7 @@ class KFRoutingLocal(LocalController):
 
     def _init_switch(self):
         cookie = 0
-        self.ofctl.set_sw_config_for_ttl()
+        self.ofctl.set_async_config()
         # priority, dummy = _get_priority(PRIORITY_ARP_HANDLING)
         # self.ofctl.set_packet_in_flow(cookie, priority,
         # dl_type=ether.ETH_TYPE_ARP)

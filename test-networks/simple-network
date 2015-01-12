@@ -13,7 +13,7 @@ from ryuo.mininet.node import TestingHost, RyuoOVSSwitch
 from ryuo.tests.utils import add_addresses, request_routing
 
 
-OFP = 'OpenFlow13'  #
+OFP = 'OpenFlow14'  #
 
 
 class SwitchOverTimeTestingTopo(Topo):

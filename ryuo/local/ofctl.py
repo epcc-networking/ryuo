@@ -112,24 +112,33 @@ class OfCtl(object):
                               dst_mac=dst_mac, idle_timeout=idle_timeout,
                               dec_ttl=dec_ttl, eth_type=ether.ETH_TYPE_IPV6)
 
-    def set_sw_config_for_ttl_restrict(self, ofp=ofproto_v1_3,
-                                       ofp_parser=ofproto_v1_3_parser):
+    def set_async_config(self, packet_in_mask=None, port_status_mask=None,
+                         flow_removed_mask=None):
+        return self.set_async_config_restrict(packet_in_mask=packet_in_mask,
+                                              port_status_mask=port_status_mask,
+                                              flow_removed_mask=flow_removed_mask,
+                                              ofp=self.ofp,
+                                              ofp_parser=self.ofp_parser)
 
-        packet_in_mask = (1 << ofp.OFPR_ACTION |
-                          1 << ofp.OFPR_INVALID_TTL)
-        port_status_mask = (1 << ofp.OFPPR_ADD |
-                            1 << ofp.OFPPR_DELETE |
-                            1 << ofp.OFPPR_MODIFY)
-        flow_removed_mask = (1 << ofp.OFPRR_IDLE_TIMEOUT |
-                             1 << ofp.OFPRR_HARD_TIMEOUT |
-                             1 << ofp.OFPRR_DELETE)
+    def set_async_config_restrict(self, packet_in_mask=None,
+                                  port_status_mask=None,
+                                  flow_removed_mask=None, ofp=ofproto_v1_3,
+                                  ofp_parser=ofproto_v1_3_parser):
+        if packet_in_mask is None:
+            packet_in_mask = (1 << ofp.OFPR_ACTION |
+                              1 << ofp.OFPR_INVALID_TTL)
+        if port_status_mask is None:
+            port_status_mask = (1 << ofp.OFPPR_ADD |
+                                1 << ofp.OFPPR_DELETE |
+                                1 << ofp.OFPPR_MODIFY)
+        if flow_removed_mask is None:
+            flow_removed_mask = (1 << ofp.OFPRR_IDLE_TIMEOUT |
+                                 1 << ofp.OFPRR_HARD_TIMEOUT |
+                                 1 << ofp.OFPRR_DELETE)
         m = ofp_parser.OFPSetAsync(
             self.dp, [packet_in_mask, 0], [port_status_mask, 0],
             [flow_removed_mask, 0])
         self.dp.send_msg(m)
-
-    def set_sw_config_for_ttl(self):
-        return self.set_sw_config_for_ttl_restrict(self.ofp, self.ofp_parser)
 
     def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
@@ -332,30 +341,38 @@ class OfCtl_v1_4(OfCtl_v1_3):
     def get_packet_in_inport(self, msg):
         return msg.match.get('in_port', self.ofp.OFPP_ANY)
 
-    def set_sw_config_for_ttl(self):
-        super(OfCtl_v1_4, self).set_sw_config_for_ttl_restrict()
+    def set_async_config(self, packet_in_mask=None, port_status_mask=None,
+                         flow_removed_mask=None):
+        # Open vSwitch 2.3.0 doesn't support OpenFlow 1.4's SetAsyncConfig
+        super(OfCtl_v1_4, self).set_async_config_restrict(
+            packet_in_mask=packet_in_mask,
+            port_status_mask=port_status_mask,
+            flow_removed_mask=flow_removed_mask)
+        # if packet_in_mask is None:
+        # packet_in_mask = (1 << self.ofp.OFPR_TABLE_MISS |
+        #                       1 << self.ofp.OFPR_APPLY_ACTION |
+        #                       1 << self.ofp.OFPR_INVALID_TTL |
+        #                       1 << self.ofp.OFPR_ACTION_SET |
+        #                       1 << self.ofp.OFPR_GROUP |
+        #                       1 << self.ofp.OFPR_PACKET_OUT)
+        # if port_status_mask is None:
+        #     port_status_mask = (1 << self.ofp.OFPPR_ADD |
+        #                         1 << self.ofp.OFPPR_DELETE |
+        #                         1 << self.ofp.OFPPR_MODIFY)
+        # if flow_removed_mask is None:
+        #     flow_removed_mask = (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
+        #                          1 << self.ofp.OFPRR_HARD_TIMEOUT |
+        #                          1 << self.ofp.OFPRR_DELETE |
+        #                          1 << self.ofp.OFPRR_GROUP_DELETE |
+        #                          1 << self.ofp.OFPRR_METER_DELETE |
+        #                          1 << self.ofp.OFPRR_EVICTION)
         # properties = [
         # self.ofp_parser.OFPAsyncConfigPropReasons(
-        # self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
-        #         (1 << self.ofp.OFPR_TABLE_MISS |
-        #          1 << self.ofp.OFPR_APPLY_ACTION |
-        #          1 << self.ofp.OFPR_INVALID_TTL |
-        #          1 << self.ofp.OFPR_ACTION_SET |
-        #          1 << self.ofp.OFPR_GROUP |
-        #          1 << self.ofp.OFPR_PACKET_OUT)),
+        #         self.ofp.OFPACPT_PACKET_IN_MASTER, mask=packet_in_mask),
         #     self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=
-        #         (1 << self.ofp.OFPPR_ADD |
-        #          1 << self.ofp.OFPPR_DELETE |
-        #          1 << self.ofp.OFPPR_MODIFY)),
+        #         self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=port_status_mask),
         #     self.ofp_parser.OFPAsyncConfigPropReasons(
-        #         self.ofp.OFPACPT_FLOW_REMOVED_MASTER, mask=
-        #         (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
-        #          1 << self.ofp.OFPRR_HARD_TIMEOUT |
-        #          1 << self.ofp.OFPRR_DELETE |
-        #          1 << self.ofp.OFPRR_GROUP_DELETE |
-        #          1 << self.ofp.OFPRR_METER_DELETE |
-        #          1 << self.ofp.OFPRR_EVICTION))]
+        # self.ofp.OFPACPT_FLOW_REMOVED_MASTER, mask=flow_removed_mask)]
         # req = self.ofp_parser.OFPSetAsync(self.dp, properties)
         # self.dp.send_msg(req)
 
