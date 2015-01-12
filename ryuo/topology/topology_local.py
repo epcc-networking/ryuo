@@ -36,6 +36,7 @@ class TopologyLocal(LocalController):
     TIMEOUT_CHECK_PERIOD = 5.
     LINK_TIMEOUT = TIMEOUT_CHECK_PERIOD * 2
     LINK_LLDP_DROP = 5
+    LLDP_PRIORITY = 0xFFFF
 
     def __init__(self, *args, **kwargs):
         kwargs['ryuo_name'] = TopologyApp.__name__
@@ -68,7 +69,7 @@ class TopologyLocal(LocalController):
 
     def _init_flows(self):
         self._logger.info('Init flow table.')
-        self.ofctl.set_packet_in_flow(cookie=0, priority=0xFFFF,
+        self.ofctl.set_packet_in_flow(cookie=0, priority=self.LLDP_PRIORITY,
                                       eth_type=ETH_TYPE_LLDP,
                                       eth_dst=lldp.LLDP_MAC_NEAREST_BRIDGE)
 
@@ -144,17 +145,9 @@ class TopologyLocal(LocalController):
             self._logger.warning('Switch left.')
             return
 
-        if dp.ofproto.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
-            actions = [dp.ofproto_parser.OFPActionOutput(port.port_no)]
-            out = dp.ofproto_parser.OFPPacketOut(
-                datapath=dp, in_port=dp.ofproto.OFPP_CONTROLLER,
-                buffer_id=dp.ofproto.OFP_NO_BUFFER, actions=actions,
-                data=port_data.lldp_data)
-            dp.send_msg(out)
-        else:
-            self._logger.error(
-                'cannot send lldp packet. unsupported version. %x',
-                dp.ofproto.OFP_VERSION)
+        self.ofctl.send_packet_out(in_port=dp.ofproto.OFPP_CONTROLLER,
+                                   output=port.port_no,
+                                   data=port_data.lldp_data)
 
     def lldp_loop(self):
         while self.is_active:
