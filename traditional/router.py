@@ -47,12 +47,12 @@ class Router():
         self._logger.info('Setting IP %s/%d of %s', ip, mask, nw)
 
         priority, dummy = get_priority(PRIORITY_MAC_LEARNING)
-        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
+        self.ofctl.set_packet_in_flow(0, priority, eth_type=ether.ETH_TYPE_IP,
                                       dst_ip=nw, dst_mask=mask)
         self._logger.info('Set MAC learning for %s', ip)
         # IP handling
         priority, dummy = get_priority(PRIORITY_IP_HANDLING)
-        self.ofctl.set_packet_in_flow(0, priority, dl_type=ether.ETH_TYPE_IP,
+        self.ofctl.set_packet_in_flow(0, priority, eth_type=ether.ETH_TYPE_IP,
                                       dst_ip=ip)
         self._logger.info('Set IP handling for %s', ip)
         # L2 switching
@@ -201,7 +201,7 @@ class Router():
         # ARP
         priority, dummy = get_priority(PRIORITY_ARP_HANDLING)
         self.ofctl.set_packet_in_flow(cookie, priority,
-                                      dl_type=ether.ETH_TYPE_ARP)
+                                      eth_type=ether.ETH_TYPE_ARP)
         # Drop by default 
         priority, dummy = get_priority(PRIORITY_DEFAULT_ROUTING)
         outport = None

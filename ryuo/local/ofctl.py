@@ -80,7 +80,7 @@ class OfCtl(object):
     def set_routing_flow(self, cookie, priority, out_port, dl_vlan=0,
                          nw_src=0, src_mask=32, nw_dst=0, dst_mask=32,
                          src_mac=0, dst_mac=0, idle_timeout=0, dec_ttl=False,
-                         dl_type=ether.ETH_TYPE_IP, in_port=None,
+                         eth_type=ether.ETH_TYPE_IP, in_port=None,
                          out_group=None):
         ofp_parser = self.dp.ofproto_parser
 
@@ -96,7 +96,7 @@ class OfCtl(object):
         if out_group is not None:
             actions.append(ofp_parser.OFPActionGroup(group_id=out_group))
 
-        self.set_flow(cookie, priority, dl_type=dl_type, dl_vlan=dl_vlan,
+        self.set_flow(cookie, priority, eth_type=eth_type, dl_vlan=dl_vlan,
                       nw_src=nw_src, src_mask=src_mask,
                       nw_dst=nw_dst, dst_mask=dst_mask,
                       idle_timeout=idle_timeout, actions=actions,
@@ -110,7 +110,7 @@ class OfCtl(object):
                               nw_src=nw_src, src_mask=src_mask, nw_dst=nw_dst,
                               dst_mask=dst_mask, src_mac=src_mac,
                               dst_mac=dst_mac, idle_timeout=idle_timeout,
-                              dec_ttl=dec_ttl, dl_type=ether.ETH_TYPE_IPV6)
+                              dec_ttl=dec_ttl, eth_type=ether.ETH_TYPE_IPV6)
 
     def set_sw_config_for_ttl(self):
         packet_in_mask = (1 << self.dp.ofproto.OFPR_ACTION |
@@ -126,7 +126,7 @@ class OfCtl(object):
             [flow_removed_mask, 0])
         self.dp.send_msg(m)
 
-    def set_flow(self, cookie, priority, dl_type=None, dl_dst=None,
+    def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
                  dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
                  dst_mask=32, nw_proto=None, idle_timeout=0, actions=None,
                  in_port=None):
@@ -136,12 +136,12 @@ class OfCtl(object):
 
         # Match
         match = ofp_parser.OFPMatch()
-        if dl_type:
-            match.set_dl_type(dl_type)
-        if dl_dst:
-            if type(dl_dst) == str:
-                dl_dst = haddr_to_bin(dl_dst)
-            match.set_dl_dst(dl_dst)
+        if eth_type:
+            match.set_dl_type(eth_type)
+        if eth_dst:
+            if type(eth_dst) == str:
+                eth_dst = haddr_to_bin(eth_dst)
+            match.set_dl_dst(eth_dst)
         if dl_vlan:
             match.set_vlan_vid(dl_vlan)
         if in_port:
@@ -156,9 +156,9 @@ class OfCtl(object):
             match.set_ipv4_dst_masked(ipv4_text_to_int(nw_dst),
                                       mask_ntob(dst_mask))
         if nw_proto:
-            if dl_type == ether.ETH_TYPE_IP:
+            if eth_type == ether.ETH_TYPE_IP:
                 match.set_ip_proto(nw_proto)
-            elif dl_type == ether.ETH_TYPE_ARP:
+            elif eth_type == ether.ETH_TYPE_ARP:
                 match.set_arp_opcode(nw_proto)
 
         # Instructions
@@ -170,13 +170,13 @@ class OfCtl(object):
                                   ofp.OFPG_ANY, 0, match, inst)
         self.dp.send_msg(m)
 
-    def set_packet_in_flow(self, cookie, priority, dl_type=0, dl_dst=0,
+    def set_packet_in_flow(self, cookie, priority, eth_type=0, eth_dst=0,
                            dl_vlan=0, dst_ip=0, dst_mask=32, nw_proto=0,
                            idle_timeout=0, in_port=None):
         miss_send_len = UINT16_MAX
         actions = [self.dp.ofproto_parser.OFPActionOutput(
             self.dp.ofproto.OFPP_CONTROLLER, miss_send_len)]
-        self.set_flow(cookie, priority, dl_type=dl_type, dl_dst=dl_dst,
+        self.set_flow(cookie, priority, eth_type=eth_type, eth_dst=eth_dst,
                       dl_vlan=dl_vlan, nw_dst=dst_ip, dst_mask=dst_mask,
                       nw_proto=nw_proto, actions=actions,
                       idle_timeout=idle_timeout, in_port=in_port)
@@ -316,32 +316,33 @@ class OfCtl_v1_4(OfCtl):
         return msg.match.get('in_port', self.ofp.OFPP_ANY)
 
     def set_sw_config_for_ttl(self):
-        properties = [
-            self.ofp_parser.OFPAsyncConfigPropReasons(
-                self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
-                (1 << self.ofp.OFPR_TABLE_MISS |
-                 1 << self.ofp.OFPR_APPLY_ACTION |
-                 1 << self.ofp.OFPR_INVALID_TTL |
-                 1 << self.ofp.OFPR_ACTION_SET |
-                 1 << self.ofp.OFPR_GROUP |
-                 1 << self.ofp.OFPR_PACKET_OUT)),
-            self.ofp_parser.OFPAsyncConfigPropReasons(
-                self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=
-                (1 << self.ofp.OFPPR_ADD |
-                 1 << self.ofp.OFPPR_DELETE |
-                 1 << self.ofp.OFPPR_MODIFY)),
-            self.ofp_parser.OFPAsyncConfigPropReasons(
-                self.ofp.OFPACPT_FLOW_REMOVED_MASTER, mask=
-                (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
-                 1 << self.ofp.OFPRR_HARD_TIMEOUT |
-                 1 << self.ofp.OFPRR_DELETE |
-                 1 << self.ofp.OFPRR_GROUP_DELETE |
-                 1 << self.ofp.OFPRR_METER_DELETE |
-                 1 << self.ofp.OFPRR_EVICTION))]
-        req = self.ofp_parser.OFPSetAsync(self.dp, properties)
-        self.dp.send_msg(req)
+        super(OfCtl_v1_4, self).set_sw_config_for_ttl()
+        # properties = [
+        # self.ofp_parser.OFPAsyncConfigPropReasons(
+        #         self.ofp.OFPACPT_PACKET_IN_MASTER, mask=
+        #         (1 << self.ofp.OFPR_TABLE_MISS |
+        #          1 << self.ofp.OFPR_APPLY_ACTION |
+        #          1 << self.ofp.OFPR_INVALID_TTL |
+        #          1 << self.ofp.OFPR_ACTION_SET |
+        #          1 << self.ofp.OFPR_GROUP |
+        #          1 << self.ofp.OFPR_PACKET_OUT)),
+        #     self.ofp_parser.OFPAsyncConfigPropReasons(
+        #         self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=
+        #         (1 << self.ofp.OFPPR_ADD |
+        #          1 << self.ofp.OFPPR_DELETE |
+        #          1 << self.ofp.OFPPR_MODIFY)),
+        #     self.ofp_parser.OFPAsyncConfigPropReasons(
+        #         self.ofp.OFPACPT_FLOW_REMOVED_MASTER, mask=
+        #         (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
+        #          1 << self.ofp.OFPRR_HARD_TIMEOUT |
+        #          1 << self.ofp.OFPRR_DELETE |
+        #          1 << self.ofp.OFPRR_GROUP_DELETE |
+        #          1 << self.ofp.OFPRR_METER_DELETE |
+        #          1 << self.ofp.OFPRR_EVICTION))]
+        # req = self.ofp_parser.OFPSetAsync(self.dp, properties)
+        # self.dp.send_msg(req)
 
-    def set_flow(self, cookie, priority, dl_type=None, dl_dst=None,
+    def set_flow(self, cookie, priority, eth_type=None, eth_dst=None,
                  dl_vlan=None,
                  nw_src=None, src_mask=32, nw_dst=None, dst_mask=32,
                  nw_proto=None, idle_timeout=0, actions=None, in_port=None):
@@ -351,10 +352,10 @@ class OfCtl_v1_4(OfCtl):
 
         # Match
         match_params = {}
-        if dl_type:
-            match_params['eth_type'] = dl_type
-        if dl_dst:
-            match_params['eth_dst'] = dl_dst
+        if eth_type:
+            match_params['eth_type'] = eth_type
+        if eth_dst:
+            match_params['eth_dst'] = eth_dst
         if dl_vlan:
             match_params['vlan_vid'] = dl_vlan
         if in_port:
@@ -367,7 +368,7 @@ class OfCtl_v1_4(OfCtl):
                 nw_dst, mask_ntob(dst_mask))
         if nw_proto:
             match_params['ip_proto'] = nw_proto
-            if dl_type == ether.ETH_TYPE_ARP:
+            if eth_type == ether.ETH_TYPE_ARP:
                 match_params['arp_op'] = nw_proto
         match = ofp_parser.OFPMatch(**match_params)
 

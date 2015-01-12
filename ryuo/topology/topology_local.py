@@ -68,28 +68,9 @@ class TopologyLocal(LocalController):
 
     def _init_flows(self):
         self._logger.info('Init flow table.')
-        ofp = self.dp.ofproto
-        ofp_parser = self.dp.ofproto_parser
-        if ofp.OFP_VERSION >= ofproto_v1_2.OFP_VERSION:
-            match = ofp_parser.OFPMatch(
-                eth_type=ETH_TYPE_LLDP,
-                eth_dst=lldp.LLDP_MAC_NEAREST_BRIDGE
-            )
-            actions = [ofp_parser.OFPActionOutput(ofp.OFPP_CONTROLLER,
-                                                  ofp.OFPCML_NO_BUFFER)]
-            inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
-                                                     actions)]
-            mod = ofp_parser.OFPFlowMod(datapath=self.dp,
-                                        match=match,
-                                        idle_timeout=0,
-                                        hard_timeout=0,
-                                        instructions=inst,
-                                        priority=0xFFFF)
-            self.dp.send_msg(mod)
-        else:
-            self._logger.error(
-                'Cannot install flow, unsupported OF version %x',
-                ofp.OFP_VERSION)
+        self.ofctl.set_packet_in_flow(cookie=0, priority=0xFFFF,
+                                      eth_type=ETH_TYPE_LLDP,
+                                      eth_dst=lldp.LLDP_MAC_NEAREST_BRIDGE)
 
     def _switch_leave(self):
         super(TopologyLocal, self)._switch_leave()

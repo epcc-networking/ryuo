@@ -602,7 +602,7 @@ class Router(dict):
 
         # Set flow: ARP handling (packet in)
         priority = get_priority(PRIORITY_ARP_HANDLING)
-        ofctl.set_packet_in_flow(cookie, priority, dl_type=ether.ETH_TYPE_ARP)
+        ofctl.set_packet_in_flow(cookie, priority, eth_type=ether.ETH_TYPE_ARP)
         self.logger.info('Set ARP handling (packet in) flow [cookie=0x%x]',
                          cookie, extra=self.sw_id)
 
@@ -871,7 +871,7 @@ class VlanRouter(object):
         # Set flow: host MAC learning (packet in)
         priority = self._get_priority(PRIORITY_MAC_LEARNING)
         self.ofctl.set_packet_in_flow(cookie, priority,
-                                     dl_type=ether.ETH_TYPE_IP,
+                                      eth_type=ether.ETH_TYPE_IP,
                                      dl_vlan=self.vlan_id,
                                      dst_ip=address.nw_addr,
                                      dst_mask=address.netmask)
@@ -881,7 +881,7 @@ class VlanRouter(object):
         # set Flow: IP handling(PacketIn)
         priority = self._get_priority(PRIORITY_IP_HANDLING)
         self.ofctl.set_packet_in_flow(cookie, priority,
-                                     dl_type=ether.ETH_TYPE_IP,
+                                      eth_type=ether.ETH_TYPE_IP,
                                      dl_vlan=self.vlan_id,
                                      dst_ip=address.default_gw)
         self.logger.info('Set IP handling (packet in) flow [cookie=0x%x]',
@@ -959,7 +959,7 @@ class VlanRouter(object):
         priority, log_msg = self._get_priority(PRIORITY_TYPE_ROUTE,
                                                route=route)
         self.ofctl.set_packet_in_flow(cookie, priority,
-                                     dl_type=ether.ETH_TYPE_IP,
+                                      eth_type=ether.ETH_TYPE_IP,
                                      dl_vlan=self.vlan_id,
                                      dst_ip=route.dst_ip,
                                      dst_mask=route.netmask)
