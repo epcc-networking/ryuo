@@ -8,6 +8,7 @@ from ryu.controller import dpset
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 import ryu.lib.dpid as dpid_lib
+import signal
 
 from ryuo.config import RYUO_HOST
 from ryuo.utils import config_logger, lock_class, expose
@@ -69,9 +70,23 @@ class Ryuo(app_manager.RyuApp):
 
     def close(self):
         self._rpc_daemon.shutdown()
+        for thread in self.threads:
+            hub.kill(thread)
         hub.joinall(self.threads)
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def stub(self, evt):
         pass
 
+
+original_sigint = signal.getsignal(signal.SIGINT)
+
+
+def clean_up(signum, frame):
+    global original_sigint
+    signal.signal(signal.SIGINT, original_sigint)
+    for app in app_manager.SERVICE_BRICKS.values():
+        app.close()
+
+
+signal.signal(signal.SIGINT, clean_up)

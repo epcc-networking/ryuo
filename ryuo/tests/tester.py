@@ -118,4 +118,3 @@ class Tester(Ryuo):
     def close(self):
         self.net.stop()
         super(Tester, self).close()
-
