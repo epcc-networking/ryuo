@@ -10,3 +10,4 @@ install:
     - sudo pip install .
 script:
     - sudo mn --test=none
+sudo: true
