@@ -14,21 +14,21 @@ from ryuo.mininet.topology import RyuoTopoFromTopoZoo
 from ryuo.topology.api import get_all_switch
 
 
-def ryuo_test(deadline=0, repeat=0, order=sys.maxint):
+def ryuo_test(deadline=0, repeat=1, order=sys.maxint):
     def _real_dec(func):
         def wrapper(self, *args, **kwargs):
             to_repeat = repeat
             name = func.__name__
-            test_res = True
+            test_res = 0
             self._logger.info('Test %s start...', name)
             run = 1
-            while to_repeat > -1:
+            while to_repeat > 0:
                 self._logger.info('Test %s, run %d', name, run)
                 res = func(self, *args, **kwargs)
                 time.sleep(deadline)
                 verifier = getattr(self, 'verify_%s' % name)
                 run_res = verifier(res)
-                test_res &= run_res
+                test_res += 1 if run_res else 0
                 if run_res:
                     self._logger.info('Success')
                 else:
@@ -38,7 +38,7 @@ def ryuo_test(deadline=0, repeat=0, order=sys.maxint):
                     cleaner(res)
                 to_repeat -= 1
                 run += 1
-            return test_res
+            return test_res, repeat
 
         wrapper.__order__ = order
         wrapper.__test_name__ = func.__name__
@@ -80,7 +80,7 @@ class Tester(Ryuo):
         self.on_all_apps_up()
         self._logger.info('Tests begins.')
         for test in self.pending:
-            self.results[test.__test_name__] = test(self)
+            self.results[test.__test_name__] = "%d/%d" % test(self)
         self._logger.info(self.results)
         self.close()
 
@@ -108,7 +108,7 @@ class Tester(Ryuo):
         # Clean up environment
         subprocess.call(['mn', '-c'])
         self.net = Mininet(topo=RyuoTopoFromTopoZoo(self.gml_file,
-                                                    'OpenFlow13',
+                                                    'OpenFlow10',
                                                     self.working_dir,
                                                     self.local_apps_to_run),
                            switch=RyuoOVSSwitch,
