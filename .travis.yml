@@ -1,0 +1,12 @@
+language: python
+python:
+    - 2.7
+before_install:
+    - sudo apt-get update
+install:
+    - git clone git://github.com/mininet/mininet
+    - sudo mininet/util/install.sh -nfv
+    - sudo pip install ryu
+    - sudo pip install .
+script:
+    - sudo mn --test=none
