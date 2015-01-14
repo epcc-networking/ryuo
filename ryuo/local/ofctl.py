@@ -7,6 +7,7 @@ from ryu.ofproto import ether
 from ryu.lib.packet import packet
 from ryu.ofproto import ofproto_v1_0, ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 from ryu.ofproto import ofproto_v1_3_parser
+from ryuo.config import OPEN_VSWITCH_MODE
 
 from ryuo.utils import *
 from ryuo.constants import *
@@ -502,38 +503,42 @@ class OfCtl_v1_4(OfCtl_v1_3):
 
     def set_async_config(self, packet_in_mask=None, port_status_mask=None,
                          flow_removed_mask=None):
-        # Open vSwitch 2.3.0 doesn't support OpenFlow 1.4's SetAsyncConfig
-        # super(OfCtl_v1_4, self).set_async_config_restrict(
-        # packet_in_mask=packet_in_mask,
-        # port_status_mask=port_status_mask,
-        #     flow_removed_mask=flow_removed_mask)
-        if packet_in_mask is None:
-            packet_in_mask = (1 << self.ofp.OFPR_TABLE_MISS |
-                              1 << self.ofp.OFPR_APPLY_ACTION |
-                              1 << self.ofp.OFPR_INVALID_TTL |
-                              1 << self.ofp.OFPR_ACTION_SET |
-                              1 << self.ofp.OFPR_GROUP |
-                              1 << self.ofp.OFPR_PACKET_OUT)
-        if port_status_mask is None:
-            port_status_mask = (1 << self.ofp.OFPPR_ADD |
-                                1 << self.ofp.OFPPR_DELETE |
-                                1 << self.ofp.OFPPR_MODIFY)
-        if flow_removed_mask is None:
-            flow_removed_mask = (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
-                                 1 << self.ofp.OFPRR_HARD_TIMEOUT |
-                                 1 << self.ofp.OFPRR_DELETE |
-                                 1 << self.ofp.OFPRR_GROUP_DELETE |
-                                 1 << self.ofp.OFPRR_METER_DELETE |
-                                 1 << self.ofp.OFPRR_EVICTION)
-        properties = [
-            self.ofp_parser.OFPAsyncConfigPropReasons(
-                self.ofp.OFPACPT_PACKET_IN_MASTER, mask=packet_in_mask),
-            self.ofp_parser.OFPAsyncConfigPropReasons(
-                self.ofp.OFPACPT_PORT_STATUS_MASTER, mask=port_status_mask),
-            self.ofp_parser.OFPAsyncConfigPropReasons(
-                self.ofp.OFPACPT_FLOW_REMOVED_MASTER, mask=flow_removed_mask)]
-        req = self.ofp_parser.OFPSetAsync(self.dp, properties)
-        self.dp.send_msg(req)
+        if OPEN_VSWITCH_MODE:
+            # Open vSwitch 2.3.0 doesn't support OpenFlow 1.4's SetAsyncConfig
+            super(OfCtl_v1_4, self).set_async_config_restrict(
+                packet_in_mask=packet_in_mask,
+                port_status_mask=port_status_mask,
+                flow_removed_mask=flow_removed_mask)
+        else:
+            if packet_in_mask is None:
+                packet_in_mask = (1 << self.ofp.OFPR_TABLE_MISS |
+                                  1 << self.ofp.OFPR_APPLY_ACTION |
+                                  1 << self.ofp.OFPR_INVALID_TTL |
+                                  1 << self.ofp.OFPR_ACTION_SET |
+                                  1 << self.ofp.OFPR_GROUP |
+                                  1 << self.ofp.OFPR_PACKET_OUT)
+            if port_status_mask is None:
+                port_status_mask = (1 << self.ofp.OFPPR_ADD |
+                                    1 << self.ofp.OFPPR_DELETE |
+                                    1 << self.ofp.OFPPR_MODIFY)
+            if flow_removed_mask is None:
+                flow_removed_mask = (1 << self.ofp.OFPRR_IDLE_TIMEOUT |
+                                     1 << self.ofp.OFPRR_HARD_TIMEOUT |
+                                     1 << self.ofp.OFPRR_DELETE |
+                                     1 << self.ofp.OFPRR_GROUP_DELETE |
+                                     1 << self.ofp.OFPRR_METER_DELETE |
+                                     1 << self.ofp.OFPRR_EVICTION)
+            properties = [
+                self.ofp_parser.OFPAsyncConfigPropReasons(
+                    self.ofp.OFPACPT_PACKET_IN_MASTER, mask=packet_in_mask),
+                self.ofp_parser.OFPAsyncConfigPropReasons(
+                    self.ofp.OFPACPT_PORT_STATUS_MASTER,
+                    mask=port_status_mask),
+                self.ofp_parser.OFPAsyncConfigPropReasons(
+                    self.ofp.OFPACPT_FLOW_REMOVED_MASTER,
+                    mask=flow_removed_mask)]
+            req = self.ofp_parser.OFPSetAsync(self.dp, properties)
+            self.dp.send_msg(req)
 
     def _mod_flow(self, command, cookie, priority, eth_type=None, eth_dst=None,
                   dl_vlan=None, nw_src=None, src_mask=32, nw_dst=None,
