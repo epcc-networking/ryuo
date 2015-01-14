@@ -20,7 +20,7 @@ from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_L2_SWITCHING, \
-    PORT_UP, ARP, PRIORITY_MAC_LEARNING
+    PORT_UP, ARP, PRIORITY_MAC_LEARNING, ETHERNET
 from ryuo.local.local_app import LocalApp
 from ryuo.config import ARP_EXPIRE_SECOND
 from ryuo.utils import nw_addr_aton, ipv4_apply_mask, expose
@@ -138,6 +138,7 @@ class KFRoutingLocal(LocalApp):
             return self._packet_in_arp(msg, headers)
         if IPV4 in headers:
             if headers[IPV4].dst in self.get_ips():
+                self._learn_host_mac_from_ip(msg, headers)
                 if ICMP in headers:
                     if headers[ICMP].type == ICMP_ECHO_REQUEST:
                         return self._packet_in_icmp_req(msg, headers)
@@ -316,6 +317,20 @@ class KFRoutingLocal(LocalApp):
                     self.ofctl.send_packet_out(suspend_packet.in_port,
                                                output,
                                                suspend_packet.data)
+
+    def _learn_host_mac_from_ip(self, msg, headers):
+        out_port = self.ofctl.get_packet_in_inport(msg)
+        if self.ports[out_port].peer_mac is not None:
+            return
+        src_mac = headers[ETHERNET].src
+        dst_mac = self.ports[out_port].mac
+        src_ip = headers[IPV4].src
+        self.arp_table.add_entry(src_ip, src_mac)
+        priority, dummy = _get_priority(PRIORITY_IMPLICIT_ROUTING)
+        self.ofctl.set_routing_flow(0, priority, out_port, src_mac=dst_mac,
+                                    dst_mac=src_mac, nw_dst=src_ip,
+                                    dec_ttl=True)
+        self._logger.info('Set implicit routing flow to %s', src_ip)
 
     def _learn_host_mac(self, msg, headers):
         # TODO: Only install flow when ARP table changed.
