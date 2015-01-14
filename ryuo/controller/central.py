@@ -9,6 +9,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 import ryu.lib.dpid as dpid_lib
 import signal
+import sys
 
 from ryuo.config import RYUO_HOST
 from ryuo.utils import config_logger, lock_class, expose
@@ -69,10 +70,9 @@ class Ryuo(app_manager.RyuApp):
         self._logger.info('Request loop existing...')
 
     def close(self):
+        ns = Pyro4.locateNS()
+        ns.remove(self.name)
         self._rpc_daemon.shutdown()
-        for thread in self.threads:
-            hub.kill(thread)
-        hub.joinall(self.threads)
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def stub(self, evt):
@@ -87,6 +87,7 @@ def clean_up(signum, frame):
     signal.signal(signal.SIGINT, original_sigint)
     for app in app_manager.SERVICE_BRICKS.values():
         app.close()
+    sys.exit()
 
 
 signal.signal(signal.SIGINT, clean_up)

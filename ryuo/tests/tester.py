@@ -1,4 +1,5 @@
 import inspect
+import os
 import subprocess
 import time
 import sys
@@ -43,6 +44,7 @@ def ryuo_test(deadline=0, repeat=1, order=sys.maxint):
         wrapper.__order__ = order
         wrapper.__test_name__ = func.__name__
         return wrapper
+
     return _real_dec
 
 
@@ -79,29 +81,15 @@ class Tester(Ryuo):
             time.sleep(5)
         self.on_all_apps_up()
         self._logger.info('Tests begins.')
+        result = 0
         for test in self.pending:
-            self.results[test.__test_name__] = "%d/%d" % test(self)
+            pass_cnt, total = test(self)
+            self.results[test.__test_name__] = "%d/%d" % (pass_cnt, total)
+            if pass_cnt != total:
+                result = 1
         self._logger.info(self.results)
         self.close()
-
-    def run_next_test(self):
-        while len(self.pending) > 0:
-            test = self.pending.pop()
-            test_name = '_'.join(test.split('_')[1:])
-            self._logger.info('Starting test %s', test_name)
-            res = getattr(self, test)()
-            verifier = getattr(self, 'verify_%s' % test_name, None)
-            if verifier is None:
-                self._logger.info('No verifier for %s', test_name)
-            self.results[test_name] = verifier(res)
-            cleaner = getattr(self, 'clean_%s' % test_name, None)
-            if cleaner is not None:
-                self._logger.info('Clean up test %s...', test_name)
-                cleaner(res)
-            if self.results[test_name]:
-                self._logger.info('Test %s pass', test_name)
-            else:
-                self._logger.info('Test %s failed', test_name)
+        os._exit(result)
 
     def setup_mininet(self):
         RyuoOVSSwitch.setup()
