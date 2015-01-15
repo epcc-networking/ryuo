@@ -2,19 +2,23 @@ from ryu.controller.handler import set_ev_cls
 from ryu.topology.switches import Link
 
 from ryuo.controller.central import Ryuo
-from ryuo.topology import event
+from ryuo.local.topology import EventSwitchEnter, EventSwitchLeave, \
+    EventPortAdd, EventPortDelete, EventPortModify, EventSwitchRequest, \
+    EventSwitchReply, EventLinkAdd, EventLinkDelete, EventLinkRequest, \
+    EventLinkReply
 from ryuo.topology.common import Switch
 from ryuo.utils import expose
 
 
 class TopologyApp(Ryuo):
-    _EVENTS = {event.EventLinkAdd,
-               event.EventLinkDelete,
-               event.EventPortAdd,
-               event.EventPortDelete,
-               event.EventPortModify,
-               event.EventSwitchEnter,
-               event.EventSwitchLeave}
+    _EVENTS = {EventLinkAdd,
+               EventLinkDelete,
+               EventPortAdd,
+               EventPortDelete,
+               EventPortModify,
+               EventSwitchEnter,
+               EventSwitchLeave}
+    _NAME = 'Topology'
 
     def __init__(self, *args, **kwargs):
         super(TopologyApp, self).__init__(*args, **kwargs)
@@ -27,19 +31,19 @@ class TopologyApp(Ryuo):
         for port_data in ports_data:
             switch.add_port(port_data)
         self.switches[dpid] = switch
-        self.send_event_to_observers(event.EventSwitchEnter(switch))
+        self.send_event_to_observers(EventSwitchEnter(switch))
 
     @expose
     def ryuo_switch_leave(self, dpid, uri):
         super(TopologyApp, self).ryuo_switch_leave(dpid, uri)
         switch = self.switches[dpid]
-        self.send_event_to_observers(event.EventSwitchLeave(switch))
+        self.send_event_to_observers(EventSwitchLeave(switch))
         if dpid in self.switches:
             del self.switches[dpid]
         if dpid in self.links:
             del self.links[dpid]
 
-    @set_ev_cls(event.EventLinkRequest)
+    @set_ev_cls(EventLinkRequest)
     def link_request_handler(self, req):
         self._logger.debug('Link request.')
         dpid = req.dpid
@@ -48,10 +52,10 @@ class TopologyApp(Ryuo):
                      self.links[src_dpid].values()]
         else:
             links = self.links[dpid].values()
-        rep = event.EventLinkReply(req.src, dpid, links)
+        rep = EventLinkReply(req.src, dpid, links)
         self.reply_to_request(req, rep)
 
-    @set_ev_cls(event.EventSwitchRequest)
+    @set_ev_cls(EventSwitchRequest)
     def switch_request_handler(self, req):
         self._logger.debug('Switch request')
         dpid = req.dpid
@@ -59,7 +63,7 @@ class TopologyApp(Ryuo):
             switches = self.switches.values()
         else:
             switches = [self.switches[dpid]]
-        rep = event.EventSwitchReply(req.src, switches)
+        rep = EventSwitchReply(req.src, switches)
         self.reply_to_request(req, rep)
 
     @expose
@@ -67,21 +71,21 @@ class TopologyApp(Ryuo):
         self._logger.info('Port %d.%d comes up', port_data.dpid,
                           port_data.port_no)
         port = self.switches[port_data.dpid].add_port(port_data)
-        self.send_event_to_observers(event.EventPortAdd(port))
+        self.send_event_to_observers(EventPortAdd(port))
 
     @expose
     def port_deleted(self, port_data):
         self._logger.info('Port %d.%d deleted.', port_data.dpid,
                           port_data.port_no)
         port = self.switches[port_data.dpid].del_port(port_data)
-        self.send_event_to_observers(event.EventPortDelete(port))
+        self.send_event_to_observers(EventPortDelete(port))
 
     @expose
     def port_modified(self, port_data):
         self._logger.info('Port %d.%d modified.', port_data.dpid,
                           port_data.port_no)
         port = self.switches[port_data.dpid].update_port(port_data)
-        self.send_event_to_observers(event.EventPortModify(port))
+        self.send_event_to_observers(EventPortModify(port))
 
     @expose
     def link_deleted(self, src_port_data, dst_port_data):
@@ -97,7 +101,7 @@ class TopologyApp(Ryuo):
                               dst_port_data.dpid,
                               dst_port_data.port_no)
             self.send_event_to_observers(
-                event.EventLinkDelete(Link(src_port, dst_port)))
+                EventLinkDelete(Link(src_port, dst_port)))
         except KeyError:
             self._logger.error('Cannot find link %d.%d -> %d.%d',
                                src_port_data.dpid,
@@ -121,7 +125,7 @@ class TopologyApp(Ryuo):
                               src_port_data.port_no,
                               dst_port_data.dpid,
                               dst_port_data.port_no)
-            self.send_event_to_observers(event.EventLinkAdd(link))
+            self.send_event_to_observers(EventLinkAdd(link))
         except KeyError:
             self._logger.error('Cannot find dst port %d.%d',
                                dst_port_data.dpid,

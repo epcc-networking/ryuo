@@ -11,25 +11,24 @@ from ryu.ofproto import ether, ofproto_v1_2, ofproto_v1_0
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
 
-from ryuo.kf_routing.app import KFRoutingApp
-from ryuo.kf_routing.switch_control import OVSSwitchControl
-from ryuo.topology.event import EventPortDelete, EventPortAdd, \
-    EventPortModify, EventLinkAdd
+from ryuo.local.switch_control import OVSSwitchControl
+from ryuo.local.topology import EventPortAdd, EventPortDelete, \
+    EventPortModify, \
+    EventLinkAdd
 from ryuo.constants import IPV4, ICMP, UDP, TCP, PRIORITY_TYPE_ROUTE, \
     PRIORITY_STATIC_ROUTING, PRIORITY_DEFAULT_ROUTING, PRIORITY_IP_HANDLING, \
     PRIORITY_VLAN_SHIFT, PRIORITY_NETMASK_SHIFT, PRIORITY_ARP_HANDLING, \
     PRIORITY_NORMAL, PRIORITY_IMPLICIT_ROUTING, ARP_REPLY_TIMER, \
     MAX_SUSPENDPACKETS, PRIORITY_L2_SWITCHING, \
     PORT_UP, ARP, PRIORITY_MAC_LEARNING, ETHERNET
-from ryuo.local.local_app import LocalApp
+from ryuo.local.local_service import LocalService
 from ryuo.config import ARP_EXPIRE_SECOND
 from ryuo.utils import nw_addr_aton, ipv4_apply_mask, expose
 
 
-class KFRoutingLocal(LocalApp):
+class Routing(LocalService):
     def __init__(self, *args, **kwargs):
-        kwargs['ryuo_name'] = KFRoutingApp.__name__
-        super(KFRoutingLocal, self).__init__(*args, **kwargs)
+        super(Routing, self).__init__(*args, **kwargs)
         self.ports = _Ports()  # port_no -> Port
         self.arp_table = None
         self.groups = None
@@ -266,7 +265,7 @@ class KFRoutingLocal(LocalApp):
                                                in_port=route.in_port)
 
     def _switch_enter(self, dp):
-        super(KFRoutingLocal, self)._switch_enter(dp)
+        super(Routing, self)._switch_enter(dp)
         for ofpport in dp.ports.values():
             self._init_port(ofpport)
         self.groups = _GroupTable(self.ofctl, self.ports)
@@ -276,7 +275,7 @@ class KFRoutingLocal(LocalApp):
         self._init_switch()
 
     def _switch_leave(self):
-        super(KFRoutingLocal, self)._switch_leave()
+        super(Routing, self)._switch_leave()
         self.groups = None
         self.arp_table = None
         self.routing_table = None

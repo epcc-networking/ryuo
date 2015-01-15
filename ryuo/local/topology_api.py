@@ -7,4 +7,4 @@ def get_link(app):
     return rep.links
 
 
-app_manager.require_app('ryuo.topology.topology_local', api_style=True)
+app_manager.require_app('ryuo.local.topology', api_style=True)

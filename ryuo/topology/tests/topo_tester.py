@@ -9,11 +9,13 @@ from ryuo.topology.api import get_all_link
 
 
 class TopoTester(Tester):
+    _NAME = 'TopoTester'
+
     def __init__(self, *args, **kwargs):
         super(TopoTester, self).__init__(
-            '/home/zsy/Projects/resilient/ryuo/tests/topo/Aarnet.gml',
-            'ryuo.topology.topology_local',
-            '/home/zsy/Projects/resilient', *args, **kwargs)
+            'ryuo/tests/topo/Aarnet.gml',
+            'ryuo.local.topology',
+            '.', *args, **kwargs)
 
     @ryuo_test(order=1)
     def all_links(self):

@@ -9,9 +9,9 @@ from ryuo.controller.central import Ryuo
 from ryuo.kf_routing.event import EventAddressRemove, Address
 from ryuo.kf_routing.event import EventAddressAdd
 from ryuo.kf_routing.utils import compare_link
+from ryuo.local.topology import EventSwitchEnter, EventSwitchLeave, \
+    EventPortAdd, EventPortDelete, EventPortModify
 from ryuo.topology.api import get_all_link
-from ryuo.topology.event import EventSwitchEnter, EventSwitchLeave, \
-    EventPortAdd, EventPortModify, EventPortDelete
 from ryuo.utils import json_response, error_response, nw_addr_aton, \
     ipv4_apply_mask
 
@@ -25,6 +25,8 @@ class KFRoutingApp(Ryuo):
     _CONTEXTS = {WSGI_CONTEXT_KEY: WSGIApplication}
 
     _EVENTS = {EventAddressAdd, EventAddressRemove}
+
+    _NAME = 'Routing'
 
     def __init__(self, *args, **kwargs):
         super(KFRoutingApp, self).__init__(*args, **kwargs)

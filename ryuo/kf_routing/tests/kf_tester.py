@@ -10,11 +10,13 @@ from ryuo.tests.utils import add_addresses
 
 
 class KFTester(Tester):
+    _NAME = 'KFTester'
+
     def __init__(self, *args, **kwargs):
         super(KFTester, self).__init__(
-            '/home/zsy/Projects/resilient/ryuo/tests/topo/Abilene.gml',
-            'ryuo.topology.topology_local ryuo.kf_routing.kf_routing_local',
-            '/home/zsy/Projects/resilient', *args, **kwargs)
+            'ryuo/tests/topo/Abilene.gml',
+            'ryuo.local.topology ryuo.local.routing',
+            '.', *args, **kwargs)
         self.ips_to_assign = None
 
     def setup_mininet(self):

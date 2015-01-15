@@ -11,13 +11,13 @@ from ryuo.mininet.topology import RyuoTopoFromTopoZoo
 
 
 def on_topology(topology_gml_file):
-    local_apps = 'ryuo.topology.topology_local'
-    working_dir = '/home/zsy/Projects/resilient'
+    local_apps = 'ryuo.topology.topology'
+    working_dir = '.'
     # Clean up environment
     mn_c = subprocess.Popen(['mn', '-c'])
     mn_c.wait()
     # Run Ryuo name server
-    ryuo_ns = subprocess.Popen(['/home/zsy/Projects/resilient/ryuo-ns'])
+    ryuo_ns = subprocess.Popen(['bin/ryuo-ns'])
     time.sleep(3)
     # Run Ryuo app
     ryuo_app = subprocess.Popen(['ryu-manager', 'ryuo.topology.app'],
@@ -39,5 +39,5 @@ def on_topology(topology_gml_file):
 
 def test():
     RyuoOVSSwitch.setup()
-    on_topology('/home/zsy/Projects/resilient/ryuo/tests/topo/Aarnet.gml')
+    on_topology('ryuo/tests/topo/Aarnet.gml')
 

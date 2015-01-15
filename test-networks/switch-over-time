@@ -34,8 +34,8 @@ class SwitchOverTimeTestingTopo(Topo):
 
         s = [self.addSwitch('s%d' % (i + 1),
                             controller_dir='.',
-                            ryu_args=['ryuo.kf_routing.kf_routing_local',
-                                      'ryuo.topology.topology_local',
+                            ryu_args=['ryuo.local.routing',
+                                      'ryuo.local.topology',
                                       '--verbose'],
                             port=6634 + i,
                             protocols=OFP) for i in range(0, 3)]

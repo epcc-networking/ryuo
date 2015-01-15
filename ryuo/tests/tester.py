@@ -49,6 +49,8 @@ def ryuo_test(deadline=0, repeat=1, order=sys.maxint):
 
 
 class Tester(Ryuo):
+    _NAME = 'Tester'
+
     def __init__(self, gml_file, local_apps, working_dir, *args, **kwargs):
         super(Tester, self).__init__(*args, **kwargs)
 
@@ -77,8 +79,8 @@ class Tester(Ryuo):
         while up_switches != total_switches:
             self._logger.info('Waiting for local apps (%d/%d) to connect...',
                               up_switches, total_switches)
-            up_switches = len(get_all_switch(self))
             time.sleep(5)
+            up_switches = len(get_all_switch(self))
         self.on_all_apps_up()
         self._logger.info('Tests begins.')
         result = 0

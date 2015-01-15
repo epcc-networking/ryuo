@@ -7,9 +7,9 @@ from ryu.controller.handler import set_ev_cls
 
 from ryuo.controller.central import Ryuo
 from ryuo.kf_routing.event import EventAddressAdd
-from ryuo.topology.app import TopologyApp
-from ryuo.topology.event import EventSwitchEnter, EventSwitchLeave, \
+from ryuo.local.topology import EventSwitchEnter, EventSwitchLeave, \
     EventLinkAdd, EventLinkDelete
+from ryuo.topology.app import TopologyApp
 
 
 class WebSocketTopology(Ryuo):

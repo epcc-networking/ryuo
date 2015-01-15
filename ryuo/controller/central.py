@@ -24,12 +24,14 @@ Pyro4.config.HOST = RYUO_HOST
 
 @lock_class([], Lock)
 class Ryuo(app_manager.RyuApp):
+    _NAME = None
+
     def __init__(self, *args, **kwargs):
         super(Ryuo, self).__init__(*args, **kwargs)
         self._setup_logger()
         self._rpc_daemon = None
         self.uri = None
-        self.name = self.__class__.__name__
+        self.name = self._NAME
         self.local_apps = {}  # {dpid: ryu instance}
         self._rpc_thread = hub.spawn(self._run_rpc_daemon)
         self.threads.append(self._rpc_thread)
@@ -70,6 +72,8 @@ class Ryuo(app_manager.RyuApp):
         self._logger.info('Request loop existing...')
 
     def close(self):
+        for thread in self.threads:
+            hub.kill(thread)
         ns = Pyro4.locateNS()
         ns.remove(self.name)
         self._rpc_daemon.shutdown()

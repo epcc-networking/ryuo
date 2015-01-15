@@ -1,6 +1,7 @@
 import time
+import logging
 
-from ryu.controller import ofp_event
+from ryu.controller import ofp_event, event
 from ryu.controller.handler import set_ev_cls, MAIN_DISPATCHER
 from ryu.lib import hub
 from ryu.lib.mac import DONTCARE_STR
@@ -9,18 +10,127 @@ from ryu.ofproto.ether import ETH_TYPE_LLDP
 from ryu.topology.switches import LLDPPacket, PortDataState, Link, LinkState
 
 from ryuo.constants import ETHERNET
-from ryuo.topology import event
-from ryuo.local.local_app import LocalApp
+from ryuo.local.local_service import LocalService
 from ryuo.topology.common import PortData, Port
-from ryuo.topology.app import TopologyApp
+
+LOG = logging.getLogger(__name__)
 
 
-class TopologyLocal(LocalApp):
-    _EVENTS = {event.EventPortAdd,
-               event.EventPortDelete,
-               event.EventPortModify,
-               event.EventLinkAdd,
-               event.EventLinkDelete}
+class EventLinkBase(event.EventBase):
+    def __init__(self, link):
+        super(EventLinkBase, self).__init__()
+        self.link = link
+
+    def __str__(self):
+        return '%s<%s>' % (self.__class__.__name__, self.link)
+
+
+class EventSwitchBase(event.EventBase):
+    def __init__(self, switch):
+        super(EventSwitchBase, self).__init__()
+        self.switch = switch
+
+    def __str__(self):
+        return '%s<dpid=%s, %s ports>' % \
+               (self.__class__.__name__,
+                self.switch.dp.id, len(self.switch.ports))
+
+
+class EventSwitchEnter(EventSwitchBase):
+    def __init__(self, switch):
+        super(EventSwitchEnter, self).__init__(switch)
+
+
+class EventSwitchLeave(EventSwitchBase):
+    def __init__(self, switch):
+        super(EventSwitchLeave, self).__init__(switch)
+
+
+class EventPortBase(event.EventBase):
+    def __init__(self, port):
+        super(EventPortBase, self).__init__()
+        self.port = port
+
+    def __str__(self):
+        return '%s<%s>' % (self.__class__.__name__, self.port)
+
+
+class EventPortAdd(EventPortBase):
+    def __init__(self, port):
+        super(EventPortAdd, self).__init__(port)
+
+
+class EventPortDelete(EventPortBase):
+    def __init__(self, port):
+        super(EventPortDelete, self).__init__(port)
+
+
+class EventPortModify(EventPortBase):
+    def __init__(self, port):
+        super(EventPortModify, self).__init__(port)
+
+
+class EventSwitchRequest(event.EventRequestBase):
+    # If dpid is None, reply all list
+    def __init__(self, dpid=None):
+        super(EventSwitchRequest, self).__init__()
+        self.dst = 'Topology'
+        self.dpid = dpid
+
+    def __str__(self):
+        return 'EventSwitchRequest<src=%s, dpid=%s>' % \
+               (self.src, self.dpid)
+
+
+class EventSwitchReply(event.EventReplyBase):
+    def __init__(self, dst, switches):
+        super(EventSwitchReply, self).__init__(dst)
+        self.switches = switches
+
+    def __str__(self):
+        return 'EventSwitchReply<dst=%s, %s>' % \
+               (self.dst, self.switches)
+
+
+class EventLinkAdd(EventLinkBase):
+    def __init__(self, link):
+        super(EventLinkAdd, self).__init__(link)
+
+
+class EventLinkDelete(EventLinkBase):
+    def __init__(self, link):
+        super(EventLinkDelete, self).__init__(link)
+
+
+class EventLinkRequest(event.EventRequestBase):
+    # If dpid is None, reply all list
+    def __init__(self, dpid=None):
+        super(EventLinkRequest, self).__init__()
+        self.dst = 'Topology'
+        self.dpid = dpid
+
+    def __str__(self):
+        return 'EventLinkRequest<src=%s, dpid=%s>' % \
+               (self.src, self.dpid)
+
+
+class EventLinkReply(event.EventReplyBase):
+    def __init__(self, dst, dpid, links):
+        super(EventLinkReply, self).__init__(dst)
+        self.dpid = dpid
+        self.links = links
+
+    def __str__(self):
+        return 'EventLinkReply<dst=%s, dpid=%s, links=%s>' % \
+               (self.dst, self.dpid, len(self.links))
+
+
+class Topology(LocalService):
+    _EVENTS = {EventPortAdd,
+               EventPortDelete,
+               EventPortModify,
+               EventLinkAdd,
+               EventLinkDelete}
     """
     Ryu topology module ported to Local Controller
     """
@@ -34,8 +144,7 @@ class TopologyLocal(LocalApp):
     LLDP_PRIORITY = 0xFFFF
 
     def __init__(self, *args, **kwargs):
-        kwargs['ryuo_name'] = TopologyApp.__name__
-        super(TopologyLocal, self).__init__(*args, **kwargs)
+        super(Topology, self).__init__(*args, **kwargs)
         self.is_active = True
         self.explicit_drop = True
         self.ports = PortDataState()
@@ -51,7 +160,7 @@ class TopologyLocal(LocalApp):
         self.ports.add_port(port, lldp_data)
 
     def _switch_enter(self, dp):
-        super(TopologyLocal, self)._switch_enter(dp)
+        super(Topology, self)._switch_enter(dp)
         self._init_flows()
         ports = [Port(PortData(dp.id, port, dp.ofproto)) for port in
                  dp.ports.values()]
@@ -69,7 +178,7 @@ class TopologyLocal(LocalApp):
                                       eth_dst=lldp.LLDP_MAC_NEAREST_BRIDGE)
 
     def _switch_leave(self):
-        super(TopologyLocal, self)._switch_leave()
+        super(Topology, self)._switch_leave()
         self.links.clear()
         self.ports.clear()
 
@@ -79,15 +188,15 @@ class TopologyLocal(LocalApp):
                 return port
 
     def _report_port_added(self, port):
-        self.send_event_to_observers(event.EventPortAdd(port))
+        self.send_event_to_observers(EventPortAdd(port))
         self.ryuo.port_added(port.port_data)
 
     def _report_port_deleted(self, port):
-        self.send_event_to_observers(event.EventPortDelete(port))
+        self.send_event_to_observers(EventPortDelete(port))
         self.ryuo.port_deleted(port.port_data)
 
     def _report_port_modified(self, port):
-        self.send_event_to_observers(event.EventPortModify(port))
+        self.send_event_to_observers(EventPortModify(port))
         self.ryuo.port_modified(port.port_data)
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
@@ -185,11 +294,11 @@ class TopologyLocal(LocalApp):
             self.lldp_event.wait(timeout=timeout)
 
     def _report_link_deleted(self, link):
-        self.send_event_to_observers(event.EventLinkDelete(link))
+        self.send_event_to_observers(EventLinkDelete(link))
         self.ryuo.link_deleted(link.src.port_data, link.dst.port_data)
 
     def _report_link_added(self, link):
-        self.send_event_to_observers(event.EventLinkAdd(link))
+        self.send_event_to_observers(EventLinkAdd(link))
         self.ryuo.link_added(link.src.port_data, link.dst.port_data)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -280,7 +389,7 @@ class TopologyLocal(LocalApp):
         self.is_active = False
         self.lldp_event.set()
         self.link_event.set()
-        super(TopologyLocal, self).close()
+        super(Topology, self).close()
 
 
 class _LinkState(LinkState):
@@ -321,3 +430,5 @@ class _LinkState(LinkState):
         rev_link_dst = self._map.pop(dst, None)
 
         return src, rev_link_dst
+
+
