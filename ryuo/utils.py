@@ -141,7 +141,7 @@ def expose(func):
 
 def pgset(pgdev, value, wait=True):
     command = ['bash', '-c', 'echo "%s" > %s' % (value, pgdev)]
-    pgsetter = subprocess.Popen(command, shell=True)
+    pgsetter = subprocess.Popen(command)
     if not wait:
         return pgsetter
     stdout, stderr = pgsetter.communicate()
@@ -159,10 +159,7 @@ def pgset(pgdev, value, wait=True):
 
 def pktgen_setup(thread, pkt_size, dst, dst_mac, udp_port, delay,
                  count, device, clone_skb=0):
-    try:
-        subprocess.call(['rmmod', 'pktgen'])
-    except Exception:
-        pass
+    subprocess.call(['rmmod', 'pktgen'])
     subprocess.call(['modprobe', 'pktgen'])
 
     thread_device = '/proc/net/pktgen/kpktgend_%d' % thread
