@@ -173,7 +173,7 @@ def pktgen_setup(thread, pkt_size, dst, dst_mac, udp_port, delay,
     pgset(pg_device, 'dst %s' % dst)
     pgset(pg_device, 'dst_mac %s' % dst_mac)
     with open('/sys/class/net/%s/address' % device, 'r') as fmac:
-        src_mac = fmac.read()
+        src_mac = fmac.read().strip()
         pgset(pg_device, 'src_mac %s' % src_mac)
     pgset(pg_device, 'delay %d' % delay)
     pgset(pg_device, 'clone_skb %d' % clone_skb)
