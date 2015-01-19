@@ -33,4 +33,5 @@ if __name__ == '__main__':
                                                             original_sigint))
 
     pktgen_popen = pktgen_start()
+    pktgen_popen.wait()
 
