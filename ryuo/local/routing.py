@@ -6,7 +6,8 @@ from ryu.lib.packet import packet
 from ryu.lib.packet.arp import ARP_REQUEST, ARP_REPLY
 from ryu.lib.packet.icmp import ICMP_ECHO_REPLY_CODE, ICMP_ECHO_REPLY, \
     ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED, \
-    ICMP_TTL_EXPIRED_CODE, ICMP_ECHO_REQUEST, ICMP_HOST_UNREACH_CODE
+    ICMP_TTL_EXPIRED_CODE, ICMP_ECHO_REQUEST, ICMP_HOST_UNREACH_CODE, \
+    ICMP_PORT_UNREACH_CODE
 from ryu.ofproto import ether, ofproto_v1_2, ofproto_v1_0
 from ryu.lib import mac as mac_lib
 from ryu.lib import hub
@@ -385,17 +386,14 @@ class Routing(LocalService):
                               src_ip=src_ip)
 
     def _packet_in_tcp_udp(self, msg, headers):
-        # Ignore all tcp/udp packets
-        pass
-        # in_port = self.ofctl.get_packet_in_inport(msg)
-        # self.ofctl.reply_icmp(in_port,
-        # headers,
-        # ICMP_DEST_UNREACH,
-        # ICMP_PORT_UNREACH_CODE,
-        # msg_data=msg.data)
-        # self._logger.info('Receive TCP/UDP from %s, sending icmp
-        # unreachable',
-        # headers[IPV4].src)
+        in_port = self.ofctl.get_packet_in_inport(msg)
+        self.ofctl.reply_icmp(in_port,
+                              headers,
+                              ICMP_DEST_UNREACH,
+                              ICMP_PORT_UNREACH_CODE,
+                              msg_data=msg.data)
+        self._logger.info('Receive TCP/UDP from %s, sending icmp unreachable',
+                          headers[IPV4].src)
 
     def _packet_in_to_node(self, msg, headers):
         if len(self.packet_buffer) >= MAX_SUSPENDPACKETS:

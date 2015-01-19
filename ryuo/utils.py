@@ -2,6 +2,7 @@ import logging
 import socket
 import struct
 import json
+import subprocess
 
 import Pyro4
 from ryu.lib import addrconv
@@ -136,3 +137,59 @@ def expose(func):
     locked = Pyro4.expose(lock_method(func))
     locked.lock_free = func
     return locked
+
+
+def pgset(pgdev, value, wait=True):
+    command = ['bash', '-c', 'echo "%s" > %s' % (value, pgdev)]
+    pgsetter = subprocess.Popen(command, shell=True)
+    if not wait:
+        return pgsetter
+    stdout, stderr = pgsetter.communicate()
+    if len(stderr) > 0:
+        raise RuntimeError(stderr)
+    pgsetter.wait()
+    with open(pgdev, 'r') as fout:
+        content = fout.read()
+        if 'Result: OK' in content:
+            return
+        for line in content.split('\n'):
+            if 'Result:' in line:
+                raise RuntimeError(line)
+
+
+def pktgen_setup(thread, pkt_size, dst, dst_mac, udp_port, delay,
+                 count, device, clone_skb=0):
+    subprocess.call(['rmmod', 'pktgen'])
+    subprocess.call(['modprobe', 'pktgen'])
+
+    thread_device = '/proc/net/pktgen/kpktgend_%d' % thread
+    pg_device = '/proc/net/pktgen/%s' % device
+
+    pgset(thread_device, 'rem_device_all')
+    pgset(thread_device, 'add_device %s' % device)
+
+    pgset(pg_device, 'pkt_size %d' % pkt_size)
+    pgset(pg_device, 'dst %s' % dst)
+    pgset(pg_device, 'dst_mac %s' % dst_mac)
+    with open('/sys/class/net/%s/address' % device, 'r') as fmac:
+        src_mac = fmac.read()
+        pgset(pg_device, 'src_mac %s' % src_mac)
+    pgset(pg_device, 'delay %d' % delay)
+    pgset(pg_device, 'clone_skb %d' % clone_skb)
+    pgset(pg_device, 'udp_dst_min %d' % udp_port)
+    pgset(pg_device, 'udp_dst_max %d' % udp_port)
+    pgset(pg_device, 'flag UDPSRC_RND')
+    pgset(pg_device, 'count %d' % count)
+
+
+_PG_CTRL = '/proc/net/pktgen/pgctrl'
+
+
+def pktgen_start():
+    return pgset(_PG_CTRL, 'start', False)
+
+
+def pktgen_stop(pktgen_popen):
+    pktgen_popen.kill()
+    pgset(_PG_CTRL, 'stop')
+    pktgen_popen.wait()
