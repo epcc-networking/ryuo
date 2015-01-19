@@ -145,7 +145,7 @@ def pgset(pgdev, value, wait=True):
     if not wait:
         return pgsetter
     stdout, stderr = pgsetter.communicate()
-    if len(stderr) > 0:
+    if stderr and len(stderr) > 0:
         raise RuntimeError(stderr)
     pgsetter.wait()
     with open(pgdev, 'r') as fout:
