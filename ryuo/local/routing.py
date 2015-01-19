@@ -391,7 +391,8 @@ class Routing(LocalService):
                               headers,
                               ICMP_DEST_UNREACH,
                               ICMP_PORT_UNREACH_CODE,
-                              msg_data=msg.data)
+                              msg_data=msg.data,
+                              src_ip=self.ports[in_port].ip)
         self._logger.info('Receive TCP/UDP from %s, sending icmp unreachable',
                           headers[IPV4].src)
 
