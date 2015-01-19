@@ -159,7 +159,10 @@ def pgset(pgdev, value, wait=True):
 
 def pktgen_setup(thread, pkt_size, dst, dst_mac, udp_port, delay,
                  count, device, clone_skb=0):
-    subprocess.call(['rmmod', 'pktgen'])
+    try:
+        subprocess.call(['rmmod', 'pktgen'])
+    except Exception:
+        pass
     subprocess.call(['modprobe', 'pktgen'])
 
     thread_device = '/proc/net/pktgen/kpktgend_%d' % thread
