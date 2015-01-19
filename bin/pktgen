@@ -24,7 +24,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     pktgen_setup(args.thread, args.pkt_size, args.destination_ip,
-                 args.destination_mac, args.udp_port, args.deplay, args.count,
+                 args.destination_mac, args.udp_port, args.delay, args.count,
                  args.device)
 
     original_sigint = signal.getsignal(signal.SIGINT)
