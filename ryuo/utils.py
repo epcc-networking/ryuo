@@ -141,6 +141,7 @@ def expose(func):
 
 def pgset(pgdev, value, wait=True):
     command = ['bash', '-c', 'echo "%s" > %s' % (value, pgdev)]
+    print ' '.join(command)
     pgsetter = subprocess.Popen(command)
     if not wait:
         return pgsetter
