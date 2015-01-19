@@ -1,0 +1,25 @@
+#!/usr/bin/env python2
+import argparse
+from matplotlib import pyplot
+from matplotlib.pyplot import hist
+from scapy.utils import rdpcap
+from ryuo.scapy.layers import Pktgen
+from ryuo.tests.utils import get_lost_sequence
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Plot packet lost')
+    parser.add_argument('-f', '--pcap-file', required=True)
+
+    args = parser.parse_args()
+    pkts = rdpcap(args.pcap_file)
+    # lost_seqs, max_seq, counter = get_lost_sequence(pkts)
+    #lost_seq = []
+    #for seq in lost_seqs:
+    #    lost_seq += seq
+
+    n, bins, patches = hist([pkt[Pktgen].seq for pkt in pkts if Pktgen in pkt],
+                            1000)
+    pyplot.xlabel('Sequence Number')
+    pyplot.ylabel('Number')
+    pyplot.show()
+

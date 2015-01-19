@@ -15,6 +15,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print >> sys.stderr, 'Reading packets from %s' % args.pcap_file
     pkts = rdpcap(args.pcap_file)
-    lost_sequence, max_seq, counter = get_lost_sequence(pkts)
-    print "Packets lost: %s, max seq: %d, pkts: %d, lost: %d" \
-          % (str(lost_sequence), max_seq, counter, len(lost_sequence))
+    lost_sequences, max_seq, counter = get_lost_sequence(pkts)
+    total_lost = 0
+    for sequence in lost_sequences:
+        total_lost += len(sequence)
+        print 'Lost: %d to %d' % (sequence[0], sequence[-1])
+    print "Packets lost: %s, max seq: %d, pkts: %d" \
+          % (total_lost, max_seq, counter)

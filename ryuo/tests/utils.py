@@ -65,11 +65,27 @@ def get_lost_sequence(pkts):
         counter += 1
         pkt = pkt[Pktgen]
         if pkt.seq > max_seq:
-            losted_seq += [i for i in range(max_seq + 1, pkt.seq)]
+            if max_seq + 1 != pkt.seq:
+                losted_seq.append([i for i in range(max_seq + 1, pkt.seq)])
             max_seq = pkt.seq
         elif pkt.seq < max_seq:
-            if pkt.seq in losted_seq:
-                losted_seq.remove(pkt.seq)
+            idx = -1
+            arr = None
+            for index, lseq in enumerate(reversed(losted_seq)):
+                if pkt.seq in lseq:
+                    idx = index
+                    arr = lseq
+                    break
+            left = [a for a in arr if a < pkt.seq]
+            right = [a for a in arr if a > pkt.seq]
+            shift = 0
+            if len(right) > 0:
+                losted_seq.insert(idx, right)
+                shift += 1
+            if len(left) > 0:
+                losted_seq.insert(idx, left)
+                shift += 1
+            losted_seq.pop(idx + shift)
     return losted_seq, max_seq, counter
 
 
