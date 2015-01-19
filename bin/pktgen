@@ -14,12 +14,12 @@ if __name__ == '__main__':
                                                  'IP')
     parser.add_argument('-i', '--interface', required=True)
     parser.add_argument('-p', '--destination-ip', required=True)
-    parser.add_argument('-s', '--pkt-size', default=64)
+    parser.add_argument('-s', '--pkt-size', default=64, type=int)
     parser.add_argument('-m', '--destination-mac', required=True)
-    parser.add_argument('-d', '--delay', default=64)
-    parser.add_argument('-u', '--udp-port', default=7000)
-    parser.add_argument('-c', '--count', default=0)
-    parser.add_argument('-t', '--thread', default=0)
+    parser.add_argument('-d', '--delay', default=64, type=int)
+    parser.add_argument('-u', '--udp-port', default=7000, type=int)
+    parser.add_argument('-c', '--count', default=0, type=int)
+    parser.add_argument('-t', '--thread', default=0, type=int)
 
     args = parser.parse_args()
 
