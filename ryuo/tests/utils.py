@@ -6,6 +6,7 @@ import subprocess
 
 from ryu.lib.dpid import dpid_to_str
 from ryu.lib.port_no import port_no_to_str
+from scapy.layers.inet import ICMP
 
 from ryuo.scapy.layers import Pktgen
 
@@ -60,7 +61,7 @@ def get_lost_sequence(pkts):
     losted_seq = []
     counter = 0
     for pkt in pkts:
-        if Pktgen not in pkt:
+        if Pktgen not in pkt or ICMP in pkt:
             continue
         counter += 1
         pkt = pkt[Pktgen]
@@ -76,6 +77,7 @@ def get_lost_sequence(pkts):
                     idx = index
                     arr = lseq
                     break
+            idx = len(losted_seq) - 1 - idx
             left = [a for a in arr if a < pkt.seq]
             right = [a for a in arr if a > pkt.seq]
             shift = 0

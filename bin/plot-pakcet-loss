@@ -12,13 +12,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     pkts = rdpcap(args.pcap_file)
-    # lost_seqs, max_seq, counter = get_lost_sequence(pkts)
-    #lost_seq = []
-    #for seq in lost_seqs:
-    #    lost_seq += seq
+    lost_seqs, max_seq, counter = get_lost_sequence(pkts)
+    lost_seq = []
+    for seq in lost_seqs:
+        lost_seq += seq
 
-    n, bins, patches = hist([pkt[Pktgen].seq for pkt in pkts if Pktgen in pkt],
-                            1000)
+    n, bins, patches = hist(lost_seq, 400)
     pyplot.xlabel('Sequence Number')
     pyplot.ylabel('Number')
     pyplot.show()
