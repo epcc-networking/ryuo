@@ -341,8 +341,8 @@ class OfCtl_v1_2(OfCtl_v1_0):
         ofp_parser = self.dp.ofproto_parser
 
         actions = []
-        if dec_ttl:
-            actions.append(ofp_parser.OFPActionDecNwTtl())
+        # if dec_ttl:
+        # actions.append(ofp_parser.OFPActionDecNwTtl())
         if src_mac:
             actions.append(ofp_parser.OFPActionSetField(eth_src=src_mac))
         if dst_mac:
