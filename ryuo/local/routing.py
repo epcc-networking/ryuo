@@ -659,11 +659,15 @@ class _Group(object):
     def _get_ports_and_macs(self):
         ports = self.group_table.ports
         ofctl = self.group_table.ofctl
-        output_ports = [
-            port_no if port_no != self.inport else
-            ofctl.dp.ofproto.OFPP_IN_PORT for port_no in self.output_ports]
-        src_macs = [ports[port_no].mac for port_no in self.output_ports]
-        dst_macs = [ports[port_no].peer_mac for port_no in self.output_ports]
+        # Test for pica8
+        output_ports = [port for port in self.output_ports if
+                        port != self.inport]
+
+        # output_ports = [
+        # port_no if port_no != self.inport else
+        #    ofctl.dp.ofproto.OFPP_IN_PORT for port_no in self.output_ports]
+        src_macs = [ports[port_no].mac for port_no in output_ports]
+        dst_macs = [ports[port_no].peer_mac for port_no in output_ports]
         return output_ports, src_macs, dst_macs
 
 
