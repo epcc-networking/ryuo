@@ -647,7 +647,9 @@ class _Group(object):
     def install(self):
         output_ports, src_macs, dst_macs = self._get_ports_and_macs()
         ofctl = self.group_table.ofctl
-        ofctl.add_failover_group(self.id, self.watch_ports, output_ports,
+        watch_ports = [port for port in self.watch_ports if
+                       self.inport != port]
+        ofctl.add_failover_group(self.id, watch_ports, output_ports,
                                  src_macs, dst_macs)
 
     def update(self):
@@ -665,7 +667,7 @@ class _Group(object):
 
         # output_ports = [
         # port_no if port_no != self.inport else
-        #    ofctl.dp.ofproto.OFPP_IN_PORT for port_no in self.output_ports]
+        # ofctl.dp.ofproto.OFPP_IN_PORT for port_no in self.output_ports]
         src_macs = [ports[port_no].mac for port_no in output_ports]
         dst_macs = [ports[port_no].peer_mac for port_no in output_ports]
         return output_ports, src_macs, dst_macs
