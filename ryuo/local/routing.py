@@ -218,7 +218,7 @@ class Routing(LocalService):
                                         None,
                                         nw_dst=route.dst_ip,
                                         dst_mask=route.netmask,
-                                        dec_ttl=True,
+                                        # dec_ttl=True,
                                         in_port=route.in_port,
                                         out_group=route.out_group.id)
         else:
@@ -236,7 +236,7 @@ class Routing(LocalService):
                                         dst_mac=dst_mac,
                                         nw_dst=route.dst_ip,
                                         dst_mask=route.netmask,
-                                        dec_ttl=True,
+                                        #dec_ttl=True,
                                         in_port=route.in_port)
 
     def _update_routes(self):
@@ -262,7 +262,7 @@ class Routing(LocalService):
                                                dst_mac=dst_mac,
                                                nw_dst=route.dst_ip,
                                                dst_mask=route.netmask,
-                                               dec_ttl=True,
+                                               #dec_ttl=True,
                                                in_port=route.in_port)
 
     def _switch_enter(self, dp):
@@ -329,7 +329,7 @@ class Routing(LocalService):
         priority, dummy = _get_priority(PRIORITY_IMPLICIT_ROUTING)
         self.ofctl.set_routing_flow(0, priority, out_port, src_mac=dst_mac,
                                     dst_mac=src_mac, nw_dst=src_ip,
-                                    dec_ttl=True)
+                                    dec_ttl=False)
         self._logger.info('Set implicit routing flow to %s', src_ip)
 
     def _learn_host_mac(self, msg, headers):
@@ -349,7 +349,7 @@ class Routing(LocalService):
                                     dst_mac=src_mac,
                                     nw_dst=src_ip,
                                     # idle_timeout=ARP_EXPIRE_SECOND,
-                                    dec_ttl=True)
+                                    dec_ttl=False)
         self._logger.info('Set implicit routing flow to %s', src_ip)
 
     def _packet_in_invalid_ttl(self, msg, headers):
