@@ -31,7 +31,9 @@ if __name__ == '__main__':
                        for command in args.before_commands]
     time.sleep(args.time)
     tshark.kill()
-    subprocess.call(['mn', '-c'])
     for command in before_commands:
         command.kill()
+    for command in before_commands:
+        command.wait()
+    subprocess.call(['mn', '-c'])
     null_file.close()
