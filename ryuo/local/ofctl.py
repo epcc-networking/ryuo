@@ -415,8 +415,8 @@ class OfCtl_v1_2(OfCtl_v1_0):
     def set_failover_group(self, group_id, watch_ports, out_ports, src_macs,
                            dst_macs, command):
         ofp_parser = self.dp.ofproto_parser
-        actions = [[ofp_parser.OFPActionSetField(eth_src=src_macs[i]),
-                    ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
+        actions = [[  # ofp_parser.OFPActionSetField(eth_src=src_macs[i]),
+                      #ofp_parser.OFPActionSetField(eth_dst=dst_macs[i]),
                     ofp_parser.OFPActionOutput(port)]
                    for i, port in enumerate(out_ports)]
         buckets = [ofp_parser.OFPBucket(0, port, self.dp.ofproto.OFPG_ANY,
