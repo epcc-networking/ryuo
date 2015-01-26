@@ -3,6 +3,7 @@ import argparse
 import os
 import subprocess
 import time
+import signal
 
 from ryuo.tests.utils import as_normal_user
 
@@ -27,12 +28,13 @@ if __name__ == '__main__':
                                   args.tshark_user, args.tshark_group),
                               stdout=null_file,
                               stderr=null_file)
-    before_commands = [subprocess.Popen(command.split(' '))
-                       for command in args.before_commands]
+    before_commands = [
+        subprocess.Popen(command.split(' '), preexec_fn=os.setsid)
+        for command in args.before_commands]
     time.sleep(args.time)
     tshark.kill()
     for command in before_commands:
-        command.kill()
+        os.killpg(command.pid, signal.SIGTERM)
     for command in before_commands:
         command.wait()
     subprocess.call(['mn', '-c'])
