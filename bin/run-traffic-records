@@ -47,15 +47,15 @@ if __name__ == '__main__':
 
         pcap_file = '%s-%s-%s.pcap' % (
             args.controller_type, args.name, gml.split('.')[0].lower())
-        mn_command = 'bin/mn-from-gml -a -e -g %s -l %s -p -r -w 200' % (
+        mn_command = 'bin/mn-from-gml -a -e -g %s -l %s -p -r -w 140' % (
             full_path, ' '.join(args.local_apps))
         if args.controller_type == 'ryu':
-            mn_command = 'bin/mn-from-gml -n -a -e -g %s -p -r -w 200' % \
+            mn_command = 'bin/mn-from-gml -n -a -e -g %s -p -r -w 140' % \
                          full_path
         subprocess.call(['bin/traffic-recorder',
                          '-b', 'ryu-manager %s' % ' '.join(args.apps),
                          mn_command,
-                         '-t', '600',
+                         '-t', '500',
                          '-o', pcap_file,
                          '-u', args.user])
 

@@ -34,7 +34,10 @@ if __name__ == '__main__':
     time.sleep(args.time)
     tshark.kill()
     for command in before_commands:
-        os.killpg(command.pid, signal.SIGTERM)
+        os.kill(command.pid, signal.SIGINT)
+    time.sleep(20)
+    for command in before_commands:
+        os.killpg(command.pid, signal.SIGKILL)
     for command in before_commands:
         command.wait()
     subprocess.call(['mn', '-c'])

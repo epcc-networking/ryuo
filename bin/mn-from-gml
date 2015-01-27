@@ -40,6 +40,7 @@ def mn_from_gml_argparser():
 
 def stop(signum, frame, net, original_handler):
     signal.signal(signum, original_handler)
+    print 'Stopping mininet...'
     net.stop()
 
 

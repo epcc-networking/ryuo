@@ -72,11 +72,9 @@ class Ryuo(app_manager.RyuApp):
         self._logger.info('Request loop existing...')
 
     def close(self):
+        self._rpc_daemon.shutdown()
         for thread in self.threads:
             hub.kill(thread)
-        ns = Pyro4.locateNS()
-        ns.remove(self.name)
-        self._rpc_daemon.shutdown()
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def stub(self, evt):
