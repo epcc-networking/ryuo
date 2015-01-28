@@ -197,7 +197,7 @@ class Router():
 
     def _init_flows(self):
         cookie = 0
-        self.ofctl.set_sw_config_for_ttl()
+        self.ofctl.set_async_config()
         # ARP
         priority, dummy = get_priority(PRIORITY_ARP_HANDLING)
         self.ofctl.set_packet_in_flow(cookie, priority,

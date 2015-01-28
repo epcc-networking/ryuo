@@ -72,7 +72,7 @@ class Ryuo(app_manager.RyuApp):
         self._logger.info('Request loop existing...')
 
     def close(self):
-        self._rpc_daemon.shutdown()
+        # self._rpc_daemon.shutdown()
         for thread in self.threads:
             hub.kill(thread)
 

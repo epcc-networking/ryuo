@@ -102,6 +102,6 @@ if __name__ == '__main__':
         with open(pcap_file.split('.')[0] + '.json', 'w') as f:
             f.write(json.dumps(results))
 
-        time.sleep(5)
+        time.sleep(60)
 
 

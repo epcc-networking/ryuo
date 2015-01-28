@@ -1,4 +1,5 @@
 import logging
+import os
 import socket
 import struct
 import json
@@ -6,6 +7,7 @@ import subprocess
 
 import Pyro4
 from ryu.lib import addrconv
+import signal
 from webob import Response
 
 from ryuo.constants import UINT32_MAX
@@ -14,6 +16,18 @@ from ryuo.constants import UINT32_MAX
 class UnixTimeStampFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
         return "{0:.6f}".format(record.created)
+
+
+def kill_with_tcp_port(port_num):
+    lsof = subprocess.Popen(['sudo', 'lsof', '-i', 'TCP:%d' % port_num])
+    stdout, stderr = lsof.communicate()
+    try:
+        pids = [int(line.split(' ')[1]) for line in stdout.split('\n')[1:]]
+        for pid in pids:
+            os.killpg(pid, signal.SIGKILL)
+            print 'Killing pid: %d' % pid
+    except Exception as e:
+        pass
 
 
 def config_logger(logger):

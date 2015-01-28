@@ -1,0 +1,32 @@
+#!/usr/bin/env python2
+import argparse
+import os
+from matplotlib import pyplot
+import numpy
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Ping latency')
+    parser.add_argument('-f', '--files', nargs='+', required=True)
+    args = parser.parse_args()
+
+    means = []
+    errors = []
+    for file in args.files:
+        with open(file, 'r') as f:
+            data = [float(line.split(' ')[6].split('time=')[1]) for line in
+                    f.readlines()[1:-4]]
+            errors.append(numpy.std(data))
+            means.append(numpy.mean(data))
+
+    pyplot.errorbar(range(len(means)), means, errors, marker='o')
+    pyplot.ylim(ymin=0)
+    pyplot.ylabel('ICMP Handling Latency (ms)')
+    pyplot.margins(0.2)
+    pyplot.xticks(range(len(means)),
+                  [os.path.basename(file).split('.')[0] for file in
+                   args.files])
+    pyplot.show()
+
+
+
+

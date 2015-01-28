@@ -6,6 +6,7 @@ import time
 import signal
 
 from ryuo.tests.utils import as_normal_user
+from ryuo.utils import kill_with_tcp_port
 
 
 if __name__ == '__main__':
@@ -35,7 +36,8 @@ if __name__ == '__main__':
     tshark.kill()
     for command in before_commands:
         os.kill(command.pid, signal.SIGINT)
-    time.sleep(20)
+    for port in range(6634, 6801):
+        kill_with_tcp_port(port)
     for command in before_commands:
         os.killpg(command.pid, signal.SIGKILL)
     for command in before_commands:
