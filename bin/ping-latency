@@ -18,13 +18,15 @@ if __name__ == '__main__':
             errors.append(numpy.std(data))
             means.append(numpy.mean(data))
 
-    pyplot.errorbar(range(len(means)), means, errors, marker='o')
+    pyplot.bar(range(len(means)), means, yerr=errors, ecolor='k', width=0.3)
     pyplot.ylim(ymin=0)
     pyplot.ylabel('ICMP Handling Latency (ms)')
-    pyplot.margins(0.2)
-    pyplot.xticks(range(len(means)),
+    pyplot.margins(0.4)
+    pyplot.xticks([i + 0.15 for i in range(len(means))],
                   [os.path.basename(file).split('.')[0] for file in
                    args.files])
+    for i in range(len(means)):
+        pyplot.text(i - 0.15, means[i] * 1.01, str(means[i]))
     pyplot.show()
 
 

@@ -19,7 +19,8 @@ class UnixTimeStampFormatter(logging.Formatter):
 
 
 def kill_with_tcp_port(port_num):
-    lsof = subprocess.Popen(['sudo', 'lsof', '-i', 'TCP:%d' % port_num])
+    lsof = subprocess.Popen(['sudo', 'lsof', '-i', 'TCP:%d' % port_num],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = lsof.communicate()
     try:
         pids = [int(line.split(' ')[1]) for line in stdout.split('\n')[1:]]
@@ -156,7 +157,8 @@ def expose(func):
 def pgset(pgdev, value, wait=True):
     command = ['bash', '-c', 'echo "%s" > %s' % (value, pgdev)]
     print ' '.join(command)
-    pgsetter = subprocess.Popen(command)
+    pgsetter = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
     if not wait:
         return pgsetter
     stdout, stderr = pgsetter.communicate()
