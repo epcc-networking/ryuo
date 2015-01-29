@@ -19,16 +19,18 @@ class UnixTimeStampFormatter(logging.Formatter):
 
 
 def kill_with_tcp_port(port_num):
-    lsof = subprocess.Popen(['sudo', 'lsof', '-i', 'TCP:%d' % port_num],
+    lsof = subprocess.Popen(['lsof', '-i', 'TCP:%d' % port_num],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = lsof.communicate()
     try:
-        pids = [int(line.split(' ')[1]) for line in stdout.split('\n')[1:]]
+        print str(stdout.split('\n'))
+        pids = [int(line.split(' ')[1]) for line in stdout.split('\n')[1:] if
+                len(line) != 0]
         for pid in pids:
-            os.killpg(pid, signal.SIGKILL)
+            os.kill(pid, signal.SIGKILL)
             print 'Killing pid: %d' % pid
     except Exception as e:
-        pass
+        print e.message
 
 
 def config_logger(logger):

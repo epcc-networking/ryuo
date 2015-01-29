@@ -6,8 +6,13 @@ from os.path import isfile
 from os.path import join
 import json
 
-from matplotlib import pyplot
+from matplotlib import pyplot, rc
 from matplotlib.pyplot import legend
+
+
+font = {'family': 'normal',
+        'weight': 'normal',
+        'size': 22}
 
 
 def is_app(app_name, file_name):
@@ -89,13 +94,16 @@ if __name__ == '__main__':
                     res['flow_group_mod_tcp'])
 
                 handlers[0] = pyplot.scatter(num_nodes,
-                                             res['total_tcp'], c='r',
+                                             res[
+                                                 'total_tcp'] / 1024.0 / 1024.0,
+                                             c='r',
                                              marker='o')
                 # handlers[1] = tcp_ax.scatter(num_edges, num_nodes,
                 #                             res['packet_in_out_tcp'],
                 #                             c='g', marker='^')
                 handlers[2] = pyplot.scatter(num_nodes,
-                                             res['flow_group_mod_tcp'],
+                                             res[
+                                                 'flow_group_mod_tcp'] / 1024.0 / 1024.0,
                                              c='b', marker='*')
             else:
                 if num_edges not in edges_frame['ryuo-total']:
@@ -105,17 +113,20 @@ if __name__ == '__main__':
                 nodes_frame['ryuo-total'][num_nodes].append(res['total_frame'])
                 edges_frame['ryuo-total'][num_edges].append(res['total_tcp'])
                 handlers[3] = pyplot.scatter(num_nodes,
-                                             res['total_tcp'], c='c',
+                                             res[
+                                                 'total_tcp'] / 1024.0 / 1024.0,
+                                             c='c',
                                              marker='v')
 
     # tcp_ax.set_xlabel('Num Edges')
     pyplot.xlabel('Number of Nodes')
     pyplot.ylabel('Control Traffic'
-                  ' (byte)')
+                  ' (MB)')
     pyplot.ylim(ymin=0)
     pyplot.xlim(xmin=0)
     legend(handlers, ['Ryu Total', 'Ryu Packet In/Out',
                       'Ryu Flow/Group', 'Ryuo Total'])
+    rc('font', **font)
 
     pyplot.show()
 

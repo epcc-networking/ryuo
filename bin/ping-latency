@@ -1,8 +1,12 @@
 #!/usr/bin/env python2
 import argparse
 import os
-from matplotlib import pyplot
+from matplotlib import pyplot, rc
 import numpy
+
+font = {'family': 'normal',
+        'weight': 'normal',
+        'size': 22}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ping latency')
@@ -18,6 +22,7 @@ if __name__ == '__main__':
             errors.append(numpy.std(data))
             means.append(numpy.mean(data))
 
+    rc('font', **font)
     pyplot.bar(range(len(means)), means, yerr=errors, ecolor='k', width=0.3)
     pyplot.ylim(ymin=0)
     pyplot.ylabel('ICMP Handling Latency (ms)')
@@ -26,7 +31,7 @@ if __name__ == '__main__':
                   [os.path.basename(file).split('.')[0] for file in
                    args.files])
     for i in range(len(means)):
-        pyplot.text(i - 0.15, means[i] * 1.01, str(means[i]))
+        pyplot.text(i + 0.2, means[i] * 1.01, str(means[i]))
     pyplot.show()
 
 

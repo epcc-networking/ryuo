@@ -23,6 +23,8 @@ if __name__ == '__main__':
                         default='wireshark')
 
     args = parser.parse_args()
+    for port in range(6634, 6801):
+        kill_with_tcp_port(port)
     null_file = open(os.devnull, 'w')
     tshark = subprocess.Popen(['tshark', '-i', 'lo', '-w', args.output],
                               preexec_fn=lambda: as_normal_user(
@@ -36,8 +38,6 @@ if __name__ == '__main__':
     tshark.kill()
     for command in before_commands:
         os.kill(command.pid, signal.SIGINT)
-    for port in range(6634, 6801):
-        kill_with_tcp_port(port)
     for command in before_commands:
         os.killpg(command.pid, signal.SIGKILL)
     for command in before_commands:
