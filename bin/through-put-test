@@ -16,7 +16,7 @@ if __name__ == '__main__':
                         required=True)
 
     args = parser.parse_args()
-    for delay in range(1000000, 2000000, 100000):
+    for delay in range(10000000, 20000000, 1000000):
         try:
             tshark = subprocess.Popen(['tshark', '-i', args.device,
                                        '-F', 'pcap',
@@ -33,5 +33,5 @@ if __name__ == '__main__':
             pktgen_stop(pktgen)
             tshark.wait()
             pktgen.wait()
-        sleep(10)
+        sleep(40)
 
