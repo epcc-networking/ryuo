@@ -17,18 +17,21 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     for delay in range(1000000, 2000000, 100000):
-        tshark = subprocess.Popen(['tshark', '-d', args.device,
-                                   '-W', 'pcap',
-                                   '-w', 'through-put-%d.pcap' % delay],
-                                  preexec_fn=lambda: as_normal_user(
-                                      args.tshark_user, 'wireshark'))
-        pktgen_setup(0, 64, args.ip, args.mac, 7000, delay, 0, args.device)
-        pktgen = pktgen_start()
-        sleep(5)
-        tshark.kill()
-        pktgen_stop(pktgen)
-        pktgen.kill()
-        tshark.wait()
-        pktgen.wait()
+        try:
+            tshark = subprocess.Popen(['tshark', '-d', args.device,
+                                       '-W', 'pcap',
+                                       '-w', 'through-put-%d.pcap' % delay],
+                                      preexec_fn=lambda: as_normal_user(
+                                          args.tshark_user, 'wireshark'))
+            pktgen_setup(0, 64, args.ip, args.mac, 7000, delay, 0, args.device)
+            pktgen = pktgen_start()
+            sleep(5)
+        except Exception as e:
+            print e.message
+        finally:
+            tshark.kill()
+            pktgen_stop(pktgen)
+            tshark.wait()
+            pktgen.wait()
         sleep(10)
 
