@@ -19,7 +19,7 @@ if __name__ == '__main__':
     for delay in range(1000000, 2000000, 100000):
         try:
             tshark = subprocess.Popen(['tshark', '-i', args.device,
-                                       '-W', 'pcap',
+                                       '-F', 'pcap',
                                        '-w', 'through-put-%d.pcap' % delay],
                                       preexec_fn=lambda: as_normal_user(
                                           args.tshark_user, 'wireshark'))
