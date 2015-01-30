@@ -7,10 +7,13 @@ from ryuo.utils import pktgen_setup, pktgen_start, pktgen_stop
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Throughput test')
-    parser.add_argument('-i', '--ip', help='IP address to test')
-    parser.add_argument('-d', '--device', help='Device to catch packets')
-    parser.add_argument('-m', '--mac', help='MAC address to test')
-    parser.add_argument('-u', '--tshark-user', help='Run tshark as')
+    parser.add_argument('-i', '--ip', help='IP address to test', required=True)
+    parser.add_argument('-d', '--device', help='Device to catch packets',
+                        required=True)
+    parser.add_argument('-m', '--mac', help='MAC address to test',
+                        required=True)
+    parser.add_argument('-u', '--tshark-user', help='Run tshark as',
+                        required=True)
 
     args = parser.parse_args()
     for delay in range(1000000, 2000000, 100000):
