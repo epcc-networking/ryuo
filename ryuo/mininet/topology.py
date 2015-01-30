@@ -48,11 +48,20 @@ class RyuoTopoFromTopoZoo(Topo):
         second_product_second_part = math.cos(long2 - long1)
 
         distance = math.radians(
-            math.acos(
+            math.acos(RyuoTopoFromTopoZoo._ensure(
                 first_product
-                + (second_product_first_part * second_product_second_part))) \
+                + (second_product_first_part * second_product_second_part)))) \
                    * 6378.137
         return (distance * 1000) / 197000
+
+    @staticmethod
+    def _ensure(number):
+        if number > 1.0:
+            return 1.0
+        elif number < -1.0:
+            return -1.0
+        else:
+            return number
 
     def _add_link(self, switches, node1, node2):
         """

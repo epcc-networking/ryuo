@@ -2,6 +2,7 @@ from grp import getgrnam
 import os
 from pwd import getpwnam
 import re
+import signal
 import subprocess
 
 from ryu.lib.dpid import dpid_to_str
@@ -91,3 +92,15 @@ def get_lost_sequence(pkts):
     return losted_seq, max_seq, counter
 
 
+def kill_with_tcp_port(port_num):
+    lsof = subprocess.Popen(['lsof', '-i', 'TCP:%d' % port_num],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = lsof.communicate()
+    try:
+        pids = [int(line.split(' ')[1]) for line in stdout.split('\n')[1:] if
+                len(line) != 0]
+        for pid in pids:
+            os.kill(pid, signal.SIGKILL)
+            print 'Killing pid: %d' % pid
+    except Exception as e:
+        print e.message

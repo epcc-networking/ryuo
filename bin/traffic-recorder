@@ -5,8 +5,7 @@ import subprocess
 import time
 import signal
 
-from ryuo.tests.utils import as_normal_user
-from ryuo.utils import kill_with_tcp_port
+from ryuo.tests.utils import as_normal_user, kill_with_tcp_port
 
 
 if __name__ == '__main__':
