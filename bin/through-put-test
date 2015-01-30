@@ -2,6 +2,7 @@
 import argparse
 import subprocess
 from time import sleep
+from ryuo.tests.utils import as_normal_user
 from ryuo.utils import pktgen_setup, pktgen_start, pktgen_stop
 
 if __name__ == '__main__':
@@ -9,12 +10,15 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--ip', 'IP address to test')
     parser.add_argument('-d', '--device', 'Device to catch packets')
     parser.add_argument('-m', '--mac', 'MAC address to test')
+    parser.add_argument('-u', '--tshark-user', 'Run tshark as')
 
     args = parser.parse_args()
     for delay in range(1000000, 2000000, 100000):
         tshark = subprocess.Popen(['tshark', '-d', args.device,
                                    '-W', 'pcap',
-                                   '-w', 'through-put-%d.pcap' % delay])
+                                   '-w', 'through-put-%d.pcap' % delay],
+                                  preexec_fn=lambda: as_normal_user(
+                                      args.tshark_user, 'wireshark'))
         pktgen_setup(0, 64, args.ip, args.mac, 7000, delay, 0, args.device)
         pktgen = pktgen_start()
         sleep(5)
