@@ -57,6 +57,10 @@ def run_tshark_stats(pcap_file, stat, field, user):
         preexec_fn=lambda: as_normal_user(user, 'wireshark'))
 
 
+def get_throughput(pkts):
+    return (len(pkts) - 1) / (pkts[-1].time - pkts[0].time)
+
+
 def get_lost_sequence(pkts):
     max_seq = 0
     losted_seq = []

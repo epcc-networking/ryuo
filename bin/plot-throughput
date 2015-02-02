@@ -1,0 +1,29 @@
+#!/usr/bin/env python2
+import argparse
+import os
+from matplotlib import pyplot
+from scapy.utils import rdpcap
+from ryuo.tests.utils import get_throughput
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Plot throughput.')
+    parser.add_argument('-d', '--dirs', nargs='+', required=True)
+    args = parser.parse_args()
+
+    throughput = {}
+    for dir in args.dirs:
+        name = dir.split('-')[1]
+        files = [os.path.join(dir, fn) for fn in next(os.walk(dir))[2]]
+        throughput[name] = {}
+        for f in files:
+            pkts = rdpcap(f)
+            count = get_throughput(pkts)
+            latency = int(os.path.basename(f).split('.')[0].split('-')[2])
+            input = int(10 ** 9 / float(latency))
+            throughput[name][input] = count
+
+    for name in throughput:
+        pyplot.plot(throughput[name].keys(), throughput[name].values(),
+                    label=name)
+    pyplot.legend(loc=2)
+    pyplot.show()
