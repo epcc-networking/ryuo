@@ -25,7 +25,7 @@ if __name__ == '__main__':
                                           args.tshark_user, 'wireshark'))
             pktgen_setup(0, 64, args.ip, args.mac, 7000, delay, 0, args.device)
             pktgen = pktgen_start()
-            sleep(5)
+            sleep(60)
         except Exception as e:
             print e.message
         finally:
