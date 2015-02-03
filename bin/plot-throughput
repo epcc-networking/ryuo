@@ -1,9 +1,16 @@
 #!/usr/bin/env python2
 import argparse
 import os
-from matplotlib import pyplot
+from matplotlib import pyplot, rc
+from scapy.layers.inet import ICMP
 from scapy.utils import rdpcap
+from ryuo.scapy.layers import Pktgen
 from ryuo.tests.utils import get_throughput
+
+
+font = {'family': 'sans',
+        'weight': 'normal',
+        'size': 22}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Plot throughput.')
@@ -16,14 +23,17 @@ if __name__ == '__main__':
         files = [os.path.join(dir, fn) for fn in next(os.walk(dir))[2]]
         throughput[name] = {}
         for f in files:
-            pkts = rdpcap(f)
+            pkts = [pkt for pkt in rdpcap(f) if ICMP in pkt and Pktgen in pkt]
             count = get_throughput(pkts)
             latency = int(os.path.basename(f).split('.')[0].split('-')[2])
-            input = int(10 ** 9 / float(latency))
-            throughput[name][input] = count
+            input = 10 ** 9 / float(latency)
+            throughput[name][int(input + 0.5)] = count
 
+    rc('font', **font)
     for name in throughput:
         pyplot.plot(throughput[name].keys(), throughput[name].values(),
                     label=name)
     pyplot.legend(loc=2)
+    pyplot.xlabel('Input packets per second')
+    pyplot.ylabel('Response packets per second')
     pyplot.show()

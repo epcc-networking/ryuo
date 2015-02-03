@@ -61,6 +61,22 @@ def get_throughput(pkts):
     return (len(pkts) - 1) / (pkts[-1].time - pkts[0].time)
 
 
+def get_longest_lost_time(pkts):
+    current_seq = 0
+    longest_lost_time = 0
+    last_packet_time = 0
+    for pkt in pkts:
+        if Pktgen not in pkt or ICMP in pkt:
+            continue
+        if current_seq < pkt[Pktgen].seq - 1:
+            lost_time = pkt.time - last_packet_time
+            if lost_time > longest_lost_time:
+                longest_lost_time = lost_time
+        current_seq = pkt[Pktgen].seq
+        last_packet_time = pkt.time
+    return longest_lost_time
+
+
 def get_lost_sequence(pkts):
     max_seq = 0
     losted_seq = []

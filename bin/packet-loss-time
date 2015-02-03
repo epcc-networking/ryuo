@@ -1,0 +1,41 @@
+#!/usr/bin/env python2
+import argparse
+import os
+from matplotlib import pyplot
+from matplotlib import rc
+import numpy
+from scapy.utils import rdpcap
+from ryuo.tests.utils import get_longest_lost_time
+
+font = {'family': 'sans',
+        'weight': 'normal',
+        'size': 22}
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Get')
+    parser.add_argument('-d', '--dirs', required=True, nargs='+')
+    args = parser.parse_args()
+
+    means = {}
+    errors = {}
+    for dir in args.dirs:
+        name = os.path.basename(dir).split('-')[1]
+        files = [os.path.join(dir, fn) for fn in next(os.walk(dir))[2]]
+        summary = []
+        for f in files:
+            pkts = rdpcap(f)
+            loss = int(0.5 + get_longest_lost_time(pkts) * 1000)
+            summary.append(loss)
+        means[name] = numpy.mean(summary)
+        errors[name] = numpy.std(summary)
+    rc('font', **font)
+    pyplot.bar(range(len(args.dirs)), means.values(), yerr=errors.values(),
+               ecolor='k', width=0.3)
+    pyplot.ylim(ymin=0)
+    pyplot.ylabel('Switch-over time (ms)')
+    pyplot.margins(0.4)
+    pyplot.xticks([i+0.15 for i in range(len(args.dirs))], means.keys())
+    for i in range(len(args.dirs)):
+        pyplot.text(i+0.2, means.values()[i] * 1.01, str(means.values()[i]))
+    pyplot.show()
+
