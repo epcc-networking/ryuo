@@ -1,4 +1,5 @@
 from Queue import Queue
+from ast import literal_eval
 
 from ryu.app.wsgi import WSGIApplication, ControllerBase
 from ryu.app.wsgi import route as rest_route
@@ -117,8 +118,8 @@ class KFRoutingApp(Ryuo):
             bfs_q = Queue()
             bfs_q.put(dst)
             level[dst] = 0
-            dst_ips = ['%s/%d' % (port.ip, port.netmask) for port in
-                       self.ports[dst].values() if port.ip is not None]
+            dst_ips = set(['%s/%d' % (port.ip, port.netmask) for port in
+                           self.ports[dst].values() if port.ip is not None])
             # build PSNs for each destination
             while not bfs_q.empty():
                 node = bfs_q.get()
@@ -241,11 +242,20 @@ class _RestController(ControllerBase):
                 requirements={'router_id': ROUTER_ID_PATTERN,
                               'port_no': PORTNO_PATTERN})
     def set_port_address(self, req, router_id, port_no, **kwargs):
-        address = eval(req.body).get('address')
+        address = literal_eval(req.body).get('address')
         if address is None:
             return error_response(400, 'Empty address')
         self.app.set_port_address_lazy(address, int(router_id, 16),
                                        int(port_no, 16))
+        return json_response({'success': True})
+
+    @rest_route('router', '/router/{router_id}/address', methods=['POST'],
+                requirements={'router_id': ROUTER_ID_PATTERN})
+    def set_address(self, req, router_id, **kwargs):
+        address = literal_eval(req.body).get('address')
+        if address is None:
+            return error_response(400, 'Empty address')
+        self.app.set_address(address, int(router_id, 16))
         return json_response({'success': True})
 
     @rest_route('router', '/router/{router_id}',

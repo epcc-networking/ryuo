@@ -1,3 +1,4 @@
+from ast import literal_eval
 import json
 
 from ryu.app.wsgi import ControllerBase
@@ -43,7 +44,7 @@ class RestController(ControllerBase):
                 requirements={'router_id': ROUTER_ID_PATTERN,
                               'port_no': PORTNO_PATTERN})
     def set_port_address(self, req, router_id, port_no, **kwargs):
-        address = eval(req.body).get('address')
+        address = literal_eval(req.body).get('address')
         self.router_app.logger.info("%s %s %s", router_id, port_no, address)
         if address is None:
             return error_response(400, 'Empty address.')

@@ -97,14 +97,16 @@ if __name__ == '__main__':
                                              res[
                                                  'total_tcp'] / 1024.0 / 1024.0,
                                              c='r',
-                                             marker='o')
+                                             marker='o',
+                                             s=15)
                 # handlers[1] = tcp_ax.scatter(num_edges, num_nodes,
                 #                             res['packet_in_out_tcp'],
                 #                             c='g', marker='^')
                 handlers[2] = pyplot.scatter(num_nodes,
                                              res[
                                                  'flow_group_mod_tcp'] / 1024.0 / 1024.0,
-                                             c='b', marker='*')
+                                             c='b', marker='*',
+                                             s=15)
             else:
                 if num_edges not in edges_frame['ryuo-total']:
                     edges_frame['ryuo-total'][num_edges] = []
@@ -116,7 +118,7 @@ if __name__ == '__main__':
                                              res[
                                                  'total_tcp'] / 1024.0 / 1024.0,
                                              c='c',
-                                             marker='v')
+                                             marker='v', s=15)
 
     # tcp_ax.set_xlabel('Num Edges')
     pyplot.xlabel('Number of Nodes')

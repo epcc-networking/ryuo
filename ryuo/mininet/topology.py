@@ -86,3 +86,48 @@ class RyuoTopoFromTopoZoo(Topo):
                               protocols=protocols)
 
 
+class FatTree(Topo):
+    def __init__(self, k, link_params=None):
+        super(Topo, self).__init__()
+        cores = [self.addSwitch('s%d-%d-%d' % (k, i, j),
+                                dpid=self._get_dpid(k, i, j)) for i in
+                 range(1, k / 2 + 1) for j in range(1, k / 2 + 1)]
+        pods = [[self.addSwitch('s%d-%d-%d' % (pod, switch, 1),
+                                dpid=self._get_dpid(pod, switch, 1)) for switch
+                 in range(k)] for pod in range(k)]
+
+        hosts = [[[self.addHost('h-%d-%d-%d' % (pod, switch, num),
+                                ip='10.%d.%d.%d/24' % (pod, switch, num),
+                                defaultRoute='10.%d.%d.1' % (pod, switch))
+                   for num in range(2, k / 2 + 2)] for switch in range(k / 2)]
+                 for pod in range(k)]
+
+        self.ips = {}  # dpid -> ip
+        for i in range(1, k / 2 + 1):
+            for j in range(1, k / 2 + 1):
+                self.ips[self._get_dpid(k, i, j)] = '10.%d.%d.%d/24' % (
+                    k, i, j)
+
+        for pod in range(k):
+            for switch in range(k):
+                self.ips[self._get_dpid(pod, switch, 1)] = '10.%d.%d.1' % (
+                    pod, switch)
+
+        for idx, core in enumerate(cores):
+            for pod in pods:
+                self.addLink(core, pod[idx / (k / 2)])
+
+        for pod in pods:
+            for idx, switch in enumerate(pod[0:k / 2]):
+                self.addLink(switch, pod[idx + k / 2])
+
+        for podid, pod in enumerate(pods):
+            for switchid, switch in enumerate(pod[0:k / 2]):
+                for i in range(2, k / 2 + 2):
+                    self.addLink(switch, hosts[podid][switchid][i])
+
+    @staticmethod
+    def _get_dpid(a, b, c):
+        return str(a).zfill(3) + str(b).zfill(3) + str(c).zfill(3)
+
+
