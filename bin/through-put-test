@@ -8,8 +8,12 @@ from ryuo.utils import pktgen_setup, pktgen_start, pktgen_stop
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Throughput test')
     parser.add_argument('-i', '--ip', help='IP address to test', required=True)
-    parser.add_argument('-d', '--device', help='Device to catch packets',
+    parser.add_argument('-d', '--device', help='Device to send packets',
                         required=True)
+    parser.add_argument('-t', '--target-host',
+                        help='Target host to catch packets', default=None)
+    parser.add_argument('-o', '--target-device', default=None,
+                        help='Device to catch packet on another host')
     parser.add_argument('-m', '--mac', help='MAC address to test',
                         required=True)
     parser.add_argument('-u', '--tshark-user', help='Run tshark as',
@@ -18,11 +22,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
     for delay in range(10000000, 50000000, 1000000):
         try:
-            tshark = subprocess.Popen(['tshark', '-i', args.device,
-                                       '-F', 'pcap',
-                                       '-w', 'through-put-%d.pcap' % delay],
-                                      preexec_fn=lambda: as_normal_user(
-                                          args.tshark_user, 'wireshark'))
+            if args.target_host or args.target_device is None:
+                tshark = subprocess.Popen(['tshark', '-i', args.device,
+                                           '-F', 'pcap',
+                                           '-w',
+                                           'through-put-%d.pcap' % delay],
+                                          preexec_fn=lambda: as_normal_user(
+                                              args.tshark_user, 'wireshark'))
+            else:
+                tshark = subprocess.Popen(
+                    ['ssh', '%s@%s' % (args.tshark_user, args.target_host),
+                     'tshark -i %s -F pcap -w throughput-h2-%d.pcap' % (
+                         args.target_device, delay)])
             pktgen_setup(0, 64, args.ip, args.mac, 7000, delay, 0, args.device)
             pktgen = pktgen_start()
             sleep(60)
