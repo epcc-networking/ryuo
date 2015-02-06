@@ -718,6 +718,7 @@ class _RoutingTable(dict):
         key = '%d:%s/%d' % (in_port, dst, netmask)
         if key in self:
             self._logger.error('Route %s overlapped.', key)
+            return
         routing_data = _Route(route_id=self.route_id,
                               dst_ip=dst,
                               netmask=netmask,

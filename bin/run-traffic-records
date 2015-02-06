@@ -87,17 +87,17 @@ if __name__ == '__main__':
             out, dummy = sum_tcp.communicate()
             results['packet_in_out_tcp'] = parse_tshark_stats(out)
 
-            flow_group_mod_filter = '(openflow_v4.type==14 || ' \
-                                    'openflow_v4.type==15)'
+            flow_group_mod_filter = 'arp or !(openflow_v4.type==13 || ' \
+                                    'openflow_v4.type==10)'
             count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
                                            flow_group_mod_filter, args.user)
             out, dummy = count_frame.communicate()
-            results['flow_group_mod_frame'] = parse_tshark_stats(out)
+            results['routing_frame'] = parse_tshark_stats(out)
 
             sum_tcp = run_tshark_stats(pcap_file, 'SUM(tcp.len)tcp.len',
                                        flow_group_mod_filter, args.user)
             out, dummy = sum_tcp.communicate()
-            results['flow_group_mod_tcp'] = parse_tshark_stats(out)
+            results['routing_tcp'] = parse_tshark_stats(out)
 
         with open(pcap_file.split('.')[0] + '.json', 'w') as f:
             f.write(json.dumps(results))

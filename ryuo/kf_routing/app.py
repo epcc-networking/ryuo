@@ -107,6 +107,8 @@ class KFRoutingApp(Ryuo):
         graph = {src_dpid: {dst_dpid: None for dst_dpid in dpids}
                  for src_dpid in dpids}
         degree = {src: 0 for src in dpids}
+        # Decrease control traffic by prevent redundant routing entry
+        route_tables = {dpid: set() for dpid in self.local_apps}
         for link in links:
             dst = link.dst.dpid
             src = link.src.dpid
@@ -118,8 +120,10 @@ class KFRoutingApp(Ryuo):
             bfs_q = Queue()
             bfs_q.put(dst)
             level[dst] = 0
-            dst_ips = set(['%s/%d' % (port.ip, port.netmask) for port in
-                           self.ports[dst].values() if port.ip is not None])
+            dst_ips = set(['%s/%d' % (ipv4_apply_mask(port.ip, port.netmask),
+                                      port.netmask)
+                           for port in self.ports[dst].values()
+                           if port.ip is not None])
             # build PSNs for each destination
             while not bfs_q.empty():
                 node = bfs_q.get()
@@ -135,6 +139,7 @@ class KFRoutingApp(Ryuo):
                     continue
                 self._logger.debug('On router %d: ', src)
                 router = self.local_apps[src]
+                route_table = route_tables[src]
                 ports = [port.port_no for port in
                          self.ports[src].values() if
                          port.ip is not None]
@@ -172,7 +177,11 @@ class KFRoutingApp(Ryuo):
                                     sorted_candidates]
                     output_ports = list(sorted_ports)
                     group_id = router.add_group(in_port, output_ports)
+                    dst_ips = [dst_ip for dst_ip in dst_ips if
+                               "%s:%d" % (dst_ip, in_port) not in route_table]
                     router.add_routes(dst_ips, group_id)
+                    for dst_ip in dst_ips:
+                        route_table.add('%s:%d' % (dst_ip, in_port))
                     self._logger.debug('%s from port %d to ports %s',
                                        dst_ips, in_port, group_id)
         return {router: self.get_router(router) for router in self.ports}

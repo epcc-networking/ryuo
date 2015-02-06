@@ -15,6 +15,8 @@ font = {'family': 'sans',
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Plot throughput.')
     parser.add_argument('-d', '--dirs', nargs='+', required=True)
+    parser.add_argument('-i', '--icmp-only', default=False,
+                        action="store_true")
     args = parser.parse_args()
 
     throughput = {}
@@ -23,7 +25,12 @@ if __name__ == '__main__':
         files = [os.path.join(dir, fn) for fn in next(os.walk(dir))[2]]
         throughput[name] = {}
         for f in files:
-            pkts = [pkt for pkt in rdpcap(f) if ICMP in pkt and Pktgen in pkt]
+            if args.icmp_only:
+                pkts = [pkt for pkt in rdpcap(f) if
+                        ICMP in pkt and Pktgen in pkt]
+            else:
+                pkts = [pkt for pkt in rdpcap(f) if
+                        Pktgen in pkt and ICMP not in pkt]
             count = get_throughput(pkts)
             latency = int(os.path.basename(f).split('.')[0].split('-')[2])
             input = 10 ** 9 / float(latency)
@@ -31,9 +38,10 @@ if __name__ == '__main__':
 
     rc('font', **font)
     for name in throughput:
-        pyplot.plot(throughput[name].keys(), throughput[name].values(),
-                    label=name)
-    pyplot.legend(loc=2)
-    pyplot.xlabel('Input packets per second')
-    pyplot.ylabel('Response packets per second')
+        keys = sorted(throughput[name].keys())
+        values = [throughput[name][key] for key in keys]
+        pyplot.plot(keys, values, label=name)
+    pyplot.legend(loc=4)
+    pyplot.xlabel('Packets sent per second')
+    pyplot.ylabel('Packets received per second')
     pyplot.show()
