@@ -4,7 +4,7 @@ import os
 from matplotlib import pyplot, rc
 import numpy
 
-font = {'family': 'normal',
+font = {'family': 'Nimbus Roman No9 L',
         'weight': 'normal',
         'size': 22}
 
@@ -23,7 +23,8 @@ if __name__ == '__main__':
             means.append(numpy.mean(data))
 
     rc('font', **font)
-    pyplot.bar(range(len(means)), means, yerr=errors, ecolor='k', width=0.3)
+    pyplot.bar(range(len(means)), means, yerr=errors, ecolor='k', width=0.3,
+               color='#90B1D3')
     pyplot.ylim(ymin=0)
     pyplot.ylabel('ICMP Handling Latency (ms)')
     pyplot.margins(0.4)

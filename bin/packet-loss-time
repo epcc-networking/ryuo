@@ -7,7 +7,7 @@ import numpy
 from scapy.utils import rdpcap
 from ryuo.tests.utils import get_longest_lost_time
 
-font = {'family': 'sans',
+font = {'family': 'Nimbus Roman No9 L',
         'weight': 'normal',
         'size': 22}
 
@@ -30,7 +30,7 @@ if __name__ == '__main__':
         errors[name] = numpy.std(summary)
     rc('font', **font)
     pyplot.bar(range(len(args.dirs)), means.values(), yerr=errors.values(),
-               ecolor='k', width=0.3)
+               ecolor='k', width=0.3, color='#90B1D3')
     pyplot.ylim(ymin=0)
     pyplot.ylabel('Switch-over time (ms)')
     pyplot.margins(0.4)

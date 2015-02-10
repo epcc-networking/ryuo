@@ -11,16 +11,19 @@ from matplotlib import pyplot, rc
 from matplotlib.pyplot import legend
 
 
-font = {'family': 'normal',
+font = {'family': 'Nimbus Roman No9 L',
         'weight': 'normal',
         'size': 22}
 
 
 class Result(object):
-    def __init__(self, total_percentage, control_percentage, num_nodes):
+    def __init__(self, total_percentage, control_percentage, num_nodes,
+                 num_edges, name):
         self.total_percentage = total_percentage
         self.control_percentage = control_percentage
         self.num_nodes = num_nodes
+        self.num_edges = num_edges
+        self.name = name
 
     def __gt__(self, other):
         return self.control_percentage > other.control_percentage or (
@@ -52,15 +55,21 @@ if __name__ == '__main__':
             ryu_data = json.load(f)
         with open(os.path.join(args.stats_dir, ryuo_file), 'r') as f:
             ryuo_data = json.load(f)
+        # Validate Data
+        if 0 in ryu_data.values():
+            continue
         total_percentage = float(ryuo_data['total_tcp']) / ryu_data[
             'total_tcp'] * 100
         control_percentafe = float(ryuo_data['total_tcp']) / ryu_data[
-            'flow_group_mod_tcp'] * 100
+            'routing_tcp'] * 100
         num_nodes = int(ryu_data['num_nodes'])
-        if num_nodes not in results:
-            results[num_nodes] = []
-        results[num_nodes].append(Result(total_percentage, control_percentafe,
-                                         ryu_data['num_nodes']))
+        num_edges = int(ryu_data['num_edges'])
+        if num_edges not in results:
+            results[num_edges] = []
+        results[num_edges].append(Result(total_percentage, control_percentafe,
+                                         ryu_data['num_nodes'],
+                                         ryu_data['num_edges'],
+                                         parts[2].split('.')[0]))
 
     for result_group in results:
         results[result_group] = sorted(results[result_group])
@@ -68,19 +77,21 @@ if __name__ == '__main__':
     print [[str(result) for result in result_g] for result_g in
            results.values()]
 
-    keys = sorted(results.keys())
-    pyplot.plot(keys, [results[key][0].total_percentage for key in keys],
-                label='Total')
-    pyplot.plot(keys, [results[key][0].control_percentage for key in keys],
-                label='FG')
+    rc('font', **font)
 
+    keys = [k for k in sorted(results.keys()) if k < 50]
+    pyplot.plot(keys, [results[key][-1].total_percentage for key in keys],
+                label='Total')
+    pyplot.plot(keys, [results[key][-1].control_percentage for key in keys],
+                label='Routing')
+
+    pyplot.axhline(y=100, c='r', ls='--')
 
     # tcp_ax.set_xlabel('Num Edges')
-    pyplot.xlabel('Number of Nodes')
-    pyplot.ylabel('Percentage (%)')
+    pyplot.xlabel('Number of Edges')
+    pyplot.ylabel('Percentage of Traffic (%)')
     pyplot.ylim(ymin=0)
     pyplot.xlim(xmin=0)
-    rc('font', **font)
     pyplot.legend(loc=1)
 
     pyplot.show()

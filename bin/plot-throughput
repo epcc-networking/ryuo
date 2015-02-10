@@ -8,7 +8,7 @@ from ryuo.scapy.layers import Pktgen
 from ryuo.tests.utils import get_throughput
 
 
-font = {'family': 'sans',
+font = {'family': 'Nimbus Roman No9 L',
         'weight': 'normal',
         'size': 22}
 
