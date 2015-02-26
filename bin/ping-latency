@@ -20,7 +20,7 @@ if __name__ == '__main__':
             data = [float(line.split(' ')[6].split('time=')[1]) for line in
                     f.readlines()[1:-4]]
             errors.append(numpy.std(data))
-            means.append(numpy.mean(data))
+            means.append(round(numpy.mean(data), 1))
 
     rc('font', **font)
     pyplot.bar(range(len(means)), means, yerr=errors, ecolor='k', width=0.3,

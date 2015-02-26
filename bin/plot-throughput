@@ -11,6 +11,7 @@ from ryuo.tests.utils import get_throughput
 font = {'family': 'Nimbus Roman No9 L',
         'weight': 'normal',
         'size': 22}
+line_styles = ['-', '--']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Plot throughput.')
@@ -37,11 +38,19 @@ if __name__ == '__main__':
             throughput[name][int(input + 0.5)] = count
 
     rc('font', **font)
+    counter = 0
+    x = 1700
     for name in throughput:
         keys = sorted(throughput[name].keys())
         values = [throughput[name][key] for key in keys]
-        pyplot.plot(keys, values, label=name)
-    pyplot.legend(loc=4)
+        pyplot.plot(keys, values, label=name, linestyle=line_styles[counter])
+        while x < 1900:
+            if x in throughput[name]:
+                pyplot.text(x - 10, throughput[name][x] - 25 * counter + 10,
+                            name)
+                break
+            x += 1
+        counter += 1
     pyplot.xlabel('Packets sent per second')
     pyplot.ylabel('Packets received per second')
     pyplot.show()

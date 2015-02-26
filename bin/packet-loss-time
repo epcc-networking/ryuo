@@ -24,9 +24,9 @@ if __name__ == '__main__':
         summary = []
         for f in files:
             pkts = rdpcap(f)
-            loss = int(0.5 + get_longest_lost_time(pkts) * 1000)
+            loss = get_longest_lost_time(pkts) * 1000
             summary.append(loss)
-        means[name] = numpy.mean(summary)
+        means[name] = int(round(numpy.mean(summary), 0))
         errors[name] = numpy.std(summary)
     rc('font', **font)
     pyplot.bar(range(len(args.dirs)), means.values(), yerr=errors.values(),

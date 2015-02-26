@@ -1,0 +1,120 @@
+#!/usr/bin/env python2
+import argparse
+import copy
+from os import listdir
+import os
+from os.path import isfile
+from os.path import join
+import json
+
+from matplotlib import pyplot, rc
+from matplotlib.pyplot import legend
+from networkx import read_gml
+import numpy
+
+
+font = {'family': 'Nimbus Roman No9 L',
+        'weight': 'normal',
+        'size': 22}
+
+
+class Result(object):
+    def __init__(self, ryu, global_required, ryuo, num_nodes, num_edges, name):
+        self.ryu = ryu
+        self.global_required = global_required
+        self.ryuo = ryuo
+
+        self.num_nodes = num_nodes
+        self.num_edges = num_edges
+        self.name = name
+
+    def __str__(self):
+        return "{'ryu': %d, 'global_required': %d, 'ryuo': %d}" % (
+            self.ryu, self.global_required, self.ryuo)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='parse pcap to get stats')
+    parser.add_argument('-d', '--stats-dir', action='store', required=True,
+                        help='tshark stats file dir')
+    parser.add_argument('-t', '--topology-dir', help='gml topology file dir',
+                        required=True)
+
+    args = parser.parse_args()
+    files = [fn for fn in next(os.walk(args.stats_dir))[2] if
+             fn.endswith('json')]
+    results = {}
+    gmls = {gml.split('.')[0].lower(): os.path.join(args.topology_dir, gml) for
+            gml in next(os.walk(args.topology_dir))[2] if gml.endswith('.gml')}
+
+    for file in files:
+        parts = file.split('-')
+        if parts[0] == 'ryuo':
+            continue
+        ryuo_file = "ryuo-%s-%s" % (parts[1], parts[2])
+        ryu_data, ryuo_data = None, None
+        with open(os.path.join(args.stats_dir, file), 'r') as f:
+            ryu_data = json.load(f)
+        with open(os.path.join(args.stats_dir, ryuo_file), 'r') as f:
+            ryuo_data = json.load(f)
+        # Validate Data
+        if ryu_data['total_tcp'] == 0 or ryu_data['http_error_frame'] != 0:
+            continue
+        topo_name = parts[2].split('.')[0]
+        graph = read_gml(gmls[topo_name])
+        num_nodes = len(graph.node)
+        num_edges = sum([len(node) for node in graph.edge.values()]) / 2
+        if num_edges not in results:
+            results[num_edges] = []
+        results[num_edges].append(
+            Result(ryu_data['total_tcp'] / 1024.0 / 1024,
+                   ryu_data['routing_tcp'] / 1024.0 / 1024,
+                   ryuo_data['total_tcp'] / 1024.0 / 1024, num_nodes,
+                   num_edges,
+                   topo_name))
+
+    for result_group in results:
+        results[result_group] = results[result_group]
+
+    print [[str(result) for result in result_g] for result_g in
+           results.values()]
+
+    rc('font', **font)
+
+    keys = [k for k in sorted(results.keys()) if k < 50]
+    pyplot.plot(keys, [
+        numpy.mean([result.ryu for result in results[key]]) for
+        key in keys], label='Normal', ls='-')
+    pyplot.plot(keys, [
+        numpy.mean([result.global_required for result in results[key]]) for
+        key in keys], label='Local Controller', ls='--')
+    pyplot.plot(keys, [
+        numpy.mean([result.ryuo for result in results[key]]) for
+        key in keys], label='Ryuo', ls=':')
+
+    pyplot.text(5, 2, 'Normal')
+    pyplot.text(25, 1.4, 'Non-local')
+    pyplot.text(40, 0.8, 'Ryuo')
+    # for key in keys:
+    # pyplot.annotate(results[key][-1].name,
+    # xy=(key, results[key][-1].control_percentage))
+
+
+    # tcp_ax.set_xlabel('Num Edges')
+    pyplot.xlabel('Number of Edges')
+    pyplot.ylabel('Control Traffic (MB)')
+    pyplot.ylim(ymin=0)
+    pyplot.xlim(xmin=0)
+    # pyplot.legend(loc=1)
+
+    pyplot.show()
+
+
+
+
+
+
+
+
+
+

@@ -74,6 +74,12 @@ if __name__ == '__main__':
         out, dummy = sum_tcp.communicate()
         results['total_tcp'] = parse_tshark_stats(out)
 
+        http_error_filter = 'http.response.code==500'
+        count_http_error = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                            http_error_filter, args.user)
+        out, dummy = count_http_error.communicate()
+        results['http_error_frame'] = parse_tshark_stats(out)
+
         if args.controller_type == 'ryu':
             packet_in_out_filter = '(openflow_v4.type==10 || ' \
                                    'openflow_v4.type==13)'

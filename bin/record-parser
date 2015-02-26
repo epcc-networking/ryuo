@@ -1,107 +1,66 @@
 #!/usr/bin/env python2
 import argparse
-import copy
-from os import listdir
 import os
-from os.path import isfile
-from os.path import join
 import json
-
-from matplotlib import pyplot, rc
-from matplotlib.pyplot import legend
-
-
-font = {'family': 'Nimbus Roman No9 L',
-        'weight': 'normal',
-        'size': 22}
-
-
-class Result(object):
-    def __init__(self, total_percentage, control_percentage, num_nodes,
-                 num_edges, name):
-        self.total_percentage = total_percentage
-        self.control_percentage = control_percentage
-        self.num_nodes = num_nodes
-        self.num_edges = num_edges
-        self.name = name
-
-    def __gt__(self, other):
-        return self.control_percentage > other.control_percentage or (
-            self.control_percentage == other.control_percentage and
-            self.total_percentage > other.total_percentage)
-
-    def __str__(self):
-        return "{'tp': %f, 'cp': %f}" % (
-            self.total_percentage, self.control_percentage)
-
+from ryuo.tests.utils import run_tshark_stats, parse_tshark_stats
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='parse pcap to get stats')
-    parser.add_argument('-d', '--stats-dir', action='store', required=True,
-                        help='tshark stats file dir')
+    parser = argparse.ArgumentParser(description='Get record stats')
+    parser.add_argument('-d', '--dir', help='Pcap dir', required=True)
+    parser.add_argument('-u', '--user', help='Run tshak as user',
+                        required=True)
 
     args = parser.parse_args()
-    files = [fn for fn in next(os.walk(args.stats_dir))[2] if
-             fn.endswith('json')]
-    results = {}
-
+    files = [fn for fn in next(os.walk(args.dir))[2] if fn.endswith('.pcap')]
     for file in files:
         parts = file.split('-')
-        if parts[0] == 'ryuo':
-            continue
-        ryuo_file = "ryuo-%s-%s" % (parts[1], parts[2])
-        ryu_data, ryuo_data = None, None
-        with open(os.path.join(args.stats_dir, file), 'r') as f:
-            ryu_data = json.load(f)
-        with open(os.path.join(args.stats_dir, ryuo_file), 'r') as f:
-            ryuo_data = json.load(f)
-        # Validate Data
-        if 0 in ryu_data.values():
-            continue
-        total_percentage = float(ryuo_data['total_tcp']) / ryu_data[
-            'total_tcp'] * 100
-        control_percentafe = float(ryuo_data['total_tcp']) / ryu_data[
-            'routing_tcp'] * 100
-        num_nodes = int(ryu_data['num_nodes'])
-        num_edges = int(ryu_data['num_edges'])
-        if num_edges not in results:
-            results[num_edges] = []
-        results[num_edges].append(Result(total_percentage, control_percentafe,
-                                         ryu_data['num_nodes'],
-                                         ryu_data['num_edges'],
-                                         parts[2].split('.')[0]))
+        pcap_file = os.path.join(args.dir, file)
 
-    for result_group in results:
-        results[result_group] = sorted(results[result_group])
+        results = {}
 
-    print [[str(result) for result in result_g] for result_g in
-           results.values()]
+        total_filter = '!(http or tcp.port<6800)'
+        if parts[0] == 'ryu':
+            total_filter = '!(http)'
+        count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                       total_filter, args.user)
+        out, dummy = count_frame.communicate()
+        results['total_frame'] = parse_tshark_stats(out)
 
-    rc('font', **font)
+        sum_tcp = run_tshark_stats(pcap_file, 'SUM(tcp.len)tcp.len',
+                                   total_filter, args.user)
+        out, dummy = sum_tcp.communicate()
+        results['total_tcp'] = parse_tshark_stats(out)
 
-    keys = [k for k in sorted(results.keys()) if k < 50]
-    pyplot.plot(keys, [results[key][-1].total_percentage for key in keys],
-                label='Total')
-    pyplot.plot(keys, [results[key][-1].control_percentage for key in keys],
-                label='Routing')
+        http_error_filter = 'http.response.code==500'
+        count_http_error = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                            http_error_filter, args.user)
+        out, dummy = count_http_error.communicate()
+        results['http_error_frame'] = parse_tshark_stats(out)
 
-    pyplot.axhline(y=100, c='r', ls='--')
+        if parts[0] == 'ryu':
+            packet_in_out_filter = '(openflow_v4.type==10 || ' \
+                                   'openflow_v4.type==13)'
+            count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                           packet_in_out_filter, args.user)
+            out, dummy = count_frame.communicate()
+            results['packet_in_out_frame'] = parse_tshark_stats(out)
 
-    # tcp_ax.set_xlabel('Num Edges')
-    pyplot.xlabel('Number of Edges')
-    pyplot.ylabel('Percentage of Traffic (%)')
-    pyplot.ylim(ymin=0)
-    pyplot.xlim(xmin=0)
-    pyplot.legend(loc=1)
+            sum_tcp = run_tshark_stats(pcap_file, 'SUM(tcp.len)tcp.len',
+                                       packet_in_out_filter, args.user)
+            out, dummy = sum_tcp.communicate()
+            results['packet_in_out_tcp'] = parse_tshark_stats(out)
 
-    pyplot.show()
+            flow_group_mod_filter = '!(openflow_v4.type==13 || ' \
+                                    'openflow_v4.type==10)'
+            count_frame = run_tshark_stats(pcap_file, 'COUNT(frame)frame',
+                                           flow_group_mod_filter, args.user)
+            out, dummy = count_frame.communicate()
+            results['routing_frame'] = parse_tshark_stats(out)
 
+            sum_tcp = run_tshark_stats(pcap_file, 'SUM(tcp.len)tcp.len',
+                                       flow_group_mod_filter, args.user)
+            out, dummy = sum_tcp.communicate()
+            results['routing_tcp'] = parse_tshark_stats(out)
 
-
-
-
-
-
-
-
-
+        with open(pcap_file.split('.')[0] + '.json', 'w') as f:
+            f.write(json.dumps(results))
