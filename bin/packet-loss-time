@@ -29,7 +29,7 @@ if __name__ == '__main__':
             loss = get_longest_lost_time(pkts) * 1000
             summary.append(loss)
         means[name] = int(round(numpy.mean(summary), 0))
-        errors[name] = scipy.stats.sem(summary) * 2.132
+        errors[name] = scipy.stats.sem(summary) * 2.776
     rc('font', **font)
     pyplot.bar(range(len(args.dirs)), means.values(), yerr=errors.values(),
                ecolor='k', width=0.3, color='#90B1D3')
