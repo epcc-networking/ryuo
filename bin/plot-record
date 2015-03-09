@@ -92,7 +92,7 @@ if __name__ == '__main__':
         numpy.mean([result.ryuo for result in results[key]]) for
         key in keys], label='Ryuo', ls=':')
 
-    pyplot.text(5, 2, 'Normal')
+    pyplot.text(5, 2, 'Standard OpenFlow')
     pyplot.text(25, 1.4, 'Non-local')
     pyplot.text(40, 0.8, 'Ryuo')
     # for key in keys:

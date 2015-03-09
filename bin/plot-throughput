@@ -39,18 +39,20 @@ if __name__ == '__main__':
 
     rc('font', **font)
     counter = 0
-    x = 1700
+    x = 50
+    labels = ['Standard OpenFlow Application\n(On PC)', 'Local Services']
     for name in throughput:
         keys = sorted(throughput[name].keys())
         values = [throughput[name][key] for key in keys]
-        pyplot.plot(keys, values, label=name, linestyle=line_styles[counter])
-        while x < 1900:
+        pyplot.plot(keys, values, label=labels[counter],
+                    linestyle=line_styles[counter])
+        while x < 60:
             if x in throughput[name]:
-                pyplot.text(x - 10, throughput[name][x] - 25 * counter + 10,
-                            name)
+                pyplot.text(x - 10, throughput[name][x] - 30 * counter + 25,
+                            labels[counter])
                 break
             x += 1
         counter += 1
     pyplot.xlabel('Packets sent per second')
-    pyplot.ylabel('Packets received per second')
+    pyplot.ylabel('Respond packets received per second')
     pyplot.show()

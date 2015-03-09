@@ -6,6 +6,8 @@ from matplotlib import rc
 import numpy
 from scapy.utils import rdpcap
 from ryuo.tests.utils import get_longest_lost_time
+import scipy
+import scipy.stats
 
 font = {'family': 'Nimbus Roman No9 L',
         'weight': 'normal',
@@ -27,7 +29,7 @@ if __name__ == '__main__':
             loss = get_longest_lost_time(pkts) * 1000
             summary.append(loss)
         means[name] = int(round(numpy.mean(summary), 0))
-        errors[name] = numpy.std(summary)
+        errors[name] = scipy.stats.sem(summary) * 2.132
     rc('font', **font)
     pyplot.bar(range(len(args.dirs)), means.values(), yerr=errors.values(),
                ecolor='k', width=0.3, color='#90B1D3')

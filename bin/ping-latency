@@ -3,6 +3,8 @@ import argparse
 import os
 from matplotlib import pyplot, rc
 import numpy
+import scipy
+import scipy.stats
 
 font = {'family': 'Nimbus Roman No9 L',
         'weight': 'normal',
@@ -19,7 +21,7 @@ if __name__ == '__main__':
         with open(file, 'r') as f:
             data = [float(line.split(' ')[6].split('time=')[1]) for line in
                     f.readlines()[1:-4]]
-            errors.append(numpy.std(data))
+            errors.append(scipy.stats.sem(data) * 1.661)
             means.append(round(numpy.mean(data), 1))
 
     rc('font', **font)
@@ -29,8 +31,10 @@ if __name__ == '__main__':
     pyplot.ylabel('ICMP Handling Latency (ms)')
     pyplot.margins(0.4)
     pyplot.xticks([i + 0.15 for i in range(len(means))],
-                  [os.path.basename(file).split('.')[0] for file in
-                   args.files])
+                  # [os.path.basename(file).split('.')[0] for file in
+                  #args.files])
+                  ["Standard OpenFlow Application\n(on PC)",
+                   "IP Routing Service\n(on switch)"])
     for i in range(len(means)):
         pyplot.text(i + 0.2, means[i] * 1.01, str(means[i]))
     pyplot.show()
