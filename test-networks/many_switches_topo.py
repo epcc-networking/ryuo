@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--controller-ip', required=True)
     parser.add_argument('-o', '--normal-openflow', default=False,
                         action='store_true')
-    parser.add_argument('-n', '--number-of-switches', default=10)
+    parser.add_argument('-n', '--number-of-switches', default=10, type=int)
     args = parser.parse_args()
 
     if args.normal_openflow:
