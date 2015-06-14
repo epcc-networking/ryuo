@@ -1,6 +1,8 @@
 #!/usr/bin/env python2
 import logging
 from threading import Lock
+import signal
+import sys
 
 import Pyro4
 from ryu.base import app_manager
@@ -8,11 +10,11 @@ from ryu.controller import dpset
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 import ryu.lib.dpid as dpid_lib
-import signal
-import sys
 
+from ryuo.common.app_lookup import AppLookupServer
+from ryuo.common.rpc import RPCDaemon
 from ryuo.config import RYUO_HOST
-from ryuo.utils import config_logger, lock_class, expose
+from ryuo.utils import config_logger, expose
 
 
 Pyro4.config.REQUIRE_EXPOSE = True
@@ -64,9 +66,9 @@ class Ryuo(app_manager.RyuApp):
             del self.local_apps[dpid]
 
     def _run_rpc_daemon(self):
-        self._rpc_daemon = Pyro4.Daemon()
+        self._rpc_daemon = RPCDaemon()
         self.uri = self._rpc_daemon.register(self)
-        ns = Pyro4.locateNS()
+        ns = AppLookupServer()
         ns.register(self.name, self.uri)
         self._logger.info('Ryuo running with name %s and uri %s.', self.name,
                           self.uri)
