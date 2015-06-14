@@ -201,6 +201,8 @@ class Topology(LocalService):
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
     def _port_status_change(self, ev):
+        if self.dp is None:
+            return
         msg = ev.msg
         reason = msg.reason
         dp = msg.datapath

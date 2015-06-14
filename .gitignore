@@ -53,8 +53,11 @@ docs/_build/
 # PyBuilder
 target/
 
-resilient.iml
+ryuo.iml
 .idea
 
 # Config
 ryuo/config.py
+
+# Testing data
+data

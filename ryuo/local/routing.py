@@ -1,3 +1,4 @@
+from threading import Lock
 import time
 
 from ryu.controller import ofp_event
@@ -54,7 +55,7 @@ class Routing(LocalService):
     @expose
     def add_routes(self, dst_ips, group_id):
         for dst_ip in dst_ips:
-            self.add_route.lock_free(self, dst_ip, group_id)
+            self.add_route(dst_ip, group_id)
 
     @expose
     def add_group(self, in_port, output_ports):
@@ -69,8 +70,7 @@ class Routing(LocalService):
             mask = ip_data[1]
             ip = ip_data[2]
             peer_ip = ip_data[3]
-            self.set_port_address.lock_free(self, port_no, ip, mask, nw,
-                                            peer_ip)
+            self.set_port_address(port_no, ip, mask, nw, peer_ip)
 
     @expose
     def set_port_address(self, port_no, ip, mask, nw, peer_ip=None):
@@ -126,6 +126,8 @@ class Routing(LocalService):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in(self, ev):
+        if self.dp is None:
+            return
         msg = ev.msg
         pkt = packet.Packet(msg.data)
         headers = dict((p.protocol_name, p)
@@ -158,6 +160,8 @@ class Routing(LocalService):
 
     @set_ev_cls(EventPortModify)
     def _on_port_modified(self, ev):
+        if self.dp is None:
+            return
         port = ev.port
         if port.is_down():
             self.ports[port.port_no].down()
@@ -492,22 +496,26 @@ class _ArpEntry(object):
 class _ArpTable(dict):
     def __init__(self, logger):
         super(_ArpTable, self).__init__()
+        self._lock = Lock()
         self._logger = logger
 
     def get(self, k, d=None):
-        if k in self.keys():
-            item = self[k]
-            if not item.is_expired():
-                return item
+        with self._lock:
+            if k in self.keys():
+                item = self[k]
+                if not item.is_expired():
+                    return item
         return d
 
     def get_ip(self, mac):
-        for k in self.keys():
-            if self[k] == mac:
-                return k
+        with self._lock:
+            for k in self.keys():
+                if self[k] == mac:
+                    return k
 
     def add_entry(self, ip, mac):
-        self[ip] = _ArpEntry(ip, mac)
+        with self._lock:
+            self[ip] = _ArpEntry(ip, mac)
         self._logger.info('Arp entry added: %s %s.', ip, mac)
 
 
@@ -673,17 +681,21 @@ class _GroupTable(dict):
         self.group_id = 1
         self.ofctl = ofctl
         self.ports = ports
+        self._lock = Lock()
 
     def clear(self):
-        super(_GroupTable, self).clear()
+        with self._lock:
+            super(_GroupTable, self).clear()
 
     def add_entry(self, output_ports, inport):
         # Reuse group if possible
-        for group in self.values():
-            if group.inport == inport and group.output_ports == output_ports:
-                return group
+        with self._lock:
+            for group in self.values():
+                if group.inport == inport and group.output_ports == output_ports:
+                    return group
         group = _Group(self.group_id, output_ports, output_ports, inport, self)
-        self[self.group_id] = group
+        with self._lock:
+            self[self.group_id] = group
         self.group_id += 1
         group.install()
         return group
@@ -712,26 +724,30 @@ class _RoutingTable(dict):
         super(_RoutingTable, self).__init__()
         self._logger = logger
         self.route_id = 0
+        self._lock = Lock()
 
     def add_entry(self, dst_ip, in_port, out_group):
         dst, netmask, ip_str = nw_addr_aton(dst_ip)
         key = '%d:%s/%d' % (in_port, dst, netmask)
-        if key in self:
-            self._logger.error('Route %s overlapped.', key)
-            return
+        with self._lock:
+            if key in self:
+                self._logger.error('Route %s overlapped.', key)
+                return
         routing_data = _Route(route_id=self.route_id,
                               dst_ip=dst,
                               netmask=netmask,
                               in_port=in_port,
                               out_group=out_group)
-        self[key] = routing_data
+        with self._lock:
+            self[key] = routing_data
         self.route_id += 1
         return routing_data
 
     def delete(self, route_id):
-        for key, value in self.items():
-            if value.route_id == route_id:
-                del self[key]
+        with self._lock:
+            for key, value in self.items():
+                if value.route_id == route_id:
+                    del self[key]
 
     def get_gateways(self):
         return [route.gateway_ip for route in self.values()]
@@ -739,29 +755,33 @@ class _RoutingTable(dict):
     def get_data_by_dst_ip(self, dst_ip):
         get_route = None
         mask = 0
-        for route in self.values():
-            if ipv4_apply_mask(dst_ip, route.netmask) == route.dst_ip:
-                if mask < route.netmask:
-                    get_route = route
-                    mask = route.netmask
+        with self._lock:
+            for route in self.values():
+                if ipv4_apply_mask(dst_ip, route.netmask) == route.dst_ip:
+                    if mask < route.netmask:
+                        get_route = route
+                        mask = route.netmask
         return get_route
 
 
 class _Ports(dict):
     def __init__(self):
         super(_Ports, self).__init__()
+        self._lock = Lock()
 
     def get_by_ip(self, ip):
-        for port in self.values():
-            if port.ip is None:
-                continue
-            if ipv4_apply_mask(ip, port.netmask) == port.nw:
-                return port
+        with self._lock:
+            for port in self.values():
+                if port.ip is None:
+                    continue
+                if ipv4_apply_mask(ip, port.netmask) == port.nw:
+                    return port
 
     def get_by_mac(self, mac):
-        for port in self.values():
-            if port.mac == mac:
-                return port
+        with self._lock:
+            for port in self.values():
+                if port.mac == mac:
+                    return port
 
 
 class _Port(object):

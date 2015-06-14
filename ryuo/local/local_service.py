@@ -1,5 +1,4 @@
 import logging
-from multiprocessing import Lock
 
 import Pyro4
 from ryu.base import app_manager
@@ -10,8 +9,8 @@ from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_0, ofproto_v1_2, ofproto_v1_3, ofproto_v1_4
 import ryu.lib.dpid as dpid_lib
 
-from ryuo.utils import config_logger, lock_class
-from ryuo.config import CENTRAL_HOST_NAME, RYU_HOST
+from ryuo.utils import config_logger
+from ryuo.config import RYU_HOST
 from ryuo.local.ofctl import OfCtl
 
 
@@ -21,7 +20,6 @@ Pyro4.config.SERIALIZERS_ACCEPTED = {'json', 'marshal', 'serpent', 'pickle'}
 Pyro4.config.HOST = RYU_HOST
 
 
-@lock_class([], Lock)
 class LocalService(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION,
                     ofproto_v1_2.OFP_VERSION,
@@ -32,6 +30,7 @@ class LocalService(app_manager.RyuApp):
         super(LocalService, self).__init__(*args, **kwargs)
         self._setup_logger()
         self._rpc_thread = None
+        self.dp = None
         self.uri = None
         self.ryuo_name = self.__class__.__name__
         self.app_name = None

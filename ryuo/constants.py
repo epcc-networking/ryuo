@@ -45,3 +45,6 @@ PORT_DOWN = 0
 
 LINK_UP = 1
 LINK_DOWN = 0
+
+RYUO_CONFIG = '~/.ryuo/config.yml'
+LOCAL_CONFIG = '~/.ryuo/local_config.yml'

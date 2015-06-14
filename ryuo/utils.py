@@ -134,9 +134,7 @@ def make_threadsafe(cls, methodnames, lockfactory):
 
 
 def expose(func):
-    locked = Pyro4.expose(lock_method(func))
-    locked.lock_free = func
-    return locked
+    return Pyro4.expose(func)
 
 
 def pgset(pgdev, value, wait=True):

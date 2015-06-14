@@ -1,4 +1,5 @@
 import logging
+from threading import Lock
 
 from ryu.lib.dpid import dpid_to_str
 from ryu.lib.port_no import port_no_to_str
@@ -94,11 +95,13 @@ class Switch(object):
         self.dp = None
         self.dpid = dpid
         self.ports = {}  # port_no -> Port
+        self._ports_lock = Lock()
 
     def add_port(self, port_data):
         port = Port(port_data)
         if not port.is_reserved():
-            self.ports[port.port_no] = port
+            with self._ports_lock:
+                self.ports[port.port_no] = port
         return port
 
     def update_port(self, port_data):
@@ -111,7 +114,8 @@ class Switch(object):
 
     def del_port(self, port_data):
         port = self.ports[port_data.port_no]
-        del self.ports[port_data.port_no]
+        with self._ports_lock:
+            del self.ports[port_data.port_no]
         return port
 
     def to_dict(self):

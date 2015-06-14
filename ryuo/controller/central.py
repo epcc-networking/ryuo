@@ -22,7 +22,6 @@ Pyro4.config.THREADPOOL_SIZE = 160
 Pyro4.config.HOST = RYUO_HOST
 
 
-@lock_class([], Lock)
 class Ryuo(app_manager.RyuApp):
     _NAME = None
 
@@ -32,6 +31,7 @@ class Ryuo(app_manager.RyuApp):
         self._rpc_daemon = None
         self.uri = None
         self.name = self._NAME
+        self._local_apps_lock = Lock()
         self.local_apps = {}  # {dpid: ryu instance}
         self._rpc_thread = hub.spawn(self._run_rpc_daemon)
         self.threads.append(self._rpc_thread)
@@ -53,13 +53,15 @@ class Ryuo(app_manager.RyuApp):
     def ryuo_switch_enter(self, dpid, uri):
         self._logger.info('Switch %s comes up on uri: %s',
                           dpid_lib.dpid_to_str(dpid), uri)
-        self.local_apps[dpid] = Pyro4.Proxy(uri)
+        with self._local_apps_lock:
+            self.local_apps[dpid] = Pyro4.Proxy(uri)
 
     @expose
     def ryuo_switch_leave(self, dpid, uri):
         self._logger.info('Switch %s leaves on uri %s.',
                           dpid_lib.dpid_to_str(dpid), uri)
-        del self.local_apps[dpid]
+        with self._local_apps_lock:
+            del self.local_apps[dpid]
 
     def _run_rpc_daemon(self):
         self._rpc_daemon = Pyro4.Daemon()
